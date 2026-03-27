@@ -1,6 +1,11 @@
 #ifndef CAN_FACADE_H
 #define CAN_FACADE_H
 
+#include "CanIf.h"
+#include "CanSM.h"
+#include "CanTp.h"
+#include "CanTrcv.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 
