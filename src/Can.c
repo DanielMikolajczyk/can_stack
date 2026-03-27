@@ -5,15 +5,16 @@
 
 // Define the max size for a single frame.
 // We are assuming CAN-FD capability (64 bytes).
-#ifndef CAN_MAX_SINGLE_FRAME_SIZE
-#define CAN_MAX_SINGLE_FRAME_SIZE 64U
+#ifndef CAN_FD_MAX_SINGLE_FRAME_SIZE
+#define CAN_FD_MAX_SINGLE_FRAME_SIZE 64U
 #endif
 
 static Can_State_t currentState = CAN_STATE_OFFLINE;
 
 void Can_Init(void) {
-    // Future logic: Initialize CanSM, CanIf, CanTp, etc.
+    // Initialize all sub-modules
     currentState = CAN_STATE_OFFLINE;
+    CanTp_Init();
 }
 
 bool Can_RequestState(Can_State_t targetState) {
@@ -30,8 +31,10 @@ bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length) {
         return false;
     }
 
+    //TODO: Check if length matches the configuration (?) - drop otherwise (?)
+
     // Transmission path routing based on payload size
-    if (length <= CAN_MAX_SINGLE_FRAME_SIZE) {
+    if (length <= CAN_FD_MAX_SINGLE_FRAME_SIZE) {
         // Fits into a single CAN-FD frame
         return CanIf_Transmit(messageId, payload, length);
     } else {
