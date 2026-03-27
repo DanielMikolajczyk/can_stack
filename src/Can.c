@@ -3,27 +3,42 @@
 #include "CanTp.h"
 #include <stddef.h>
 
+#include "CanSM.h"
+
 // Define the max size for a single frame.
 // We are assuming CAN-FD capability (64 bytes).
 #ifndef CAN_FD_MAX_SINGLE_FRAME_SIZE
 #define CAN_FD_MAX_SINGLE_FRAME_SIZE 64U
 #endif
 
-static Can_State_t currentState = CAN_STATE_OFFLINE;
-
 void Can_Init(void) {
     // Initialize all sub-modules
-    currentState = CAN_STATE_OFFLINE;
+    CanSM_Init();
     CanTp_Init();
 }
 
 bool Can_RequestState(Can_State_t targetState) {
-    // Future logic: Route state requests to CanSM
-    return true;
+    CanSM_NetworkState_t smState;
+    switch(targetState) {
+        case CAN_STATE_ONLINE:  smState = CANSM_STATE_ONLINE; break;
+        case CAN_STATE_SLEEP:   smState = CANSM_STATE_SLEEP; break;
+        case CAN_STATE_ERROR:   smState = CANSM_STATE_BUS_OFF; break;
+        case CAN_STATE_OFFLINE:
+        default:                smState = CANSM_STATE_OFFLINE; break;
+    }
+    return CanSM_RequestState(smState);
 }
 
 Can_State_t Can_GetCurrentState(void) {
-    return currentState;
+    CanSM_NetworkState_t smState = CanSM_GetCurrentState();
+    switch(smState) {
+        case CANSM_STATE_ONLINE:  return CAN_STATE_ONLINE;
+        case CANSM_STATE_SLEEP:   return CAN_STATE_SLEEP;
+        case CANSM_STATE_BUS_OFF: return CAN_STATE_ERROR;
+        case CANSM_STATE_OFFLINE:
+        case CANSM_STATE_UNINIT:
+        default:                  return CAN_STATE_OFFLINE;
+    }
 }
 
 bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length) {
@@ -41,4 +56,11 @@ bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length) {
         // Exceeds single frame size, Transport Protocol is needed
         return CanTp_Transmit(messageId, payload, length);
     }
+}
+
+void Can_MainFunction(void) {
+    // Process the state machine for network management
+    CanSM_MainFunction();
+    // Process the transport protocol state machines (for TX and RX)
+    CanTp_MainFunction();
 }

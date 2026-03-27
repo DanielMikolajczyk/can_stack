@@ -24,6 +24,9 @@ Can_State_t Can_GetCurrentState(void);
 // Unified Transmission (Routes to CanIf or CanTp internally)
 bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length);
 
+// Main processing function for the entire CAN stack.
+void Can_MainFunction(void);
+
 // Callbacks (To be implemented by the outer Application)
 extern void App_OnCanMessageReceived(uint32_t messageId, const uint8_t* payload, uint16_t length);
 extern void App_OnCanStateChanged(Can_State_t newState);
