@@ -2,6 +2,7 @@
 #include "CanIf.h"
 #include <stddef.h>
 #include <string.h>
+#include "Can.h" // For routing reassembled messages up to the Facade
 
 // ISO 15765-2 Protocol Control Information (PCI) types
 #define PCI_TYPE_SINGLE_FRAME       0x00
@@ -12,6 +13,16 @@
 // Maximum number of concurrent TP transmissions.
 #ifndef CANTP_MAX_TX_CHANNELS
 #define CANTP_MAX_TX_CHANNELS 2
+#endif
+
+// Maximum number of concurrent TP receptions.
+#ifndef CANTP_MAX_RX_CHANNELS
+#define CANTP_MAX_RX_CHANNELS 2
+#endif
+
+// Maximum payload size for reassembling a received segmented message
+#ifndef CANTP_MAX_RX_PAYLOAD
+#define CANTP_MAX_RX_PAYLOAD 256
 #endif
 
 // Max payload for a First Frame (8-byte CAN frame: 2 for PCI, 6 for data)
@@ -40,7 +51,22 @@ typedef struct {
     uint8_t cfSentInBlock;  // Counter for CFs sent in the current block
 } CanTp_TxChannel_t;
 
+typedef enum {
+    CANTP_RX_STATE_IDLE,
+    CANTP_RX_STATE_RECEIVING_CF
+} CanTp_RxState_t;
+
+typedef struct {
+    CanTp_RxState_t state;
+    uint32_t messageId;
+    uint8_t buffer[CANTP_MAX_RX_PAYLOAD];
+    uint16_t totalSize;
+    uint16_t receivedSize;
+    uint8_t expectedSequenceNumber;
+} CanTp_RxChannel_t;
+
 static CanTp_TxChannel_t txChannels[CANTP_MAX_TX_CHANNELS];
+static CanTp_RxChannel_t rxChannels[CANTP_MAX_RX_CHANNELS];
 
 // Forward declarations for internal state processing functions
 static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel);
@@ -49,6 +75,9 @@ static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel);
 void CanTp_Init(void) {
     for (int i = 0; i < CANTP_MAX_TX_CHANNELS; ++i) {
         txChannels[i].state = CANTP_TX_STATE_IDLE;
+    }
+    for (int i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
+        rxChannels[i].state = CANTP_RX_STATE_IDLE;
     }
 }
 
@@ -89,13 +118,9 @@ void CanTp_MainFunction(void) {
                 break;
 
             case CANTP_TX_STATE_WAIT_FC:
-                // --- SIMULATION HOOK ---
-                // In a real implementation, we would wait for an FC frame from the receiver.
-                // For now, we assume we received a "Continue To Send" (CTS) FC frame
-                // that allows us to send all remaining frames without further flow control.
-                channel->blockSize = 0; // A block size of 0 means send all CFs.
-                channel->cfSentInBlock = 0;
-                channel->state = CANTP_TX_STATE_SEND_CF;
+                // We are waiting for an actual Flow Control frame, handled in CanTp_RxIndication.
+                // In a production system, a timeout check would be implemented here.
+                // TODO: timeout check
                 break;
 
             case CANTP_TX_STATE_SEND_CF:
@@ -128,6 +153,110 @@ static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
         channel->state = CANTP_TX_STATE_WAIT_FC;
     }
     // If transmit fails, we will retry on the next CanTp_MainFunction call.
+}
+
+void CanTp_RxIndication(uint32_t messageId, const uint8_t* payload, uint16_t length) {
+    if (payload == NULL || length == 0) return;
+
+    uint8_t pciType = payload[0] & 0xF0;
+
+    switch (pciType) {
+        case PCI_TYPE_FLOW_CONTROL: {
+            uint8_t flowStatus = payload[0] & 0x0F;
+            for (int i = 0; i < CANTP_MAX_TX_CHANNELS; ++i) {
+                if (txChannels[i].state == CANTP_TX_STATE_WAIT_FC) {
+                    if (flowStatus == 0) { // Clear To Send (CTS)
+                        txChannels[i].blockSize = payload[1];
+                        txChannels[i].cfSentInBlock = 0;
+                        txChannels[i].state = CANTP_TX_STATE_SEND_CF;
+                    } else if (flowStatus == 2) { // Overflow (Receiver buffer full)
+                        txChannels[i].state = CANTP_TX_STATE_IDLE; // Abort
+                    }
+                    // If flowStatus == 1 (Wait), we stay in WAIT_FC
+                    break;
+                }
+            }
+            break;
+        }
+        case PCI_TYPE_SINGLE_FRAME: {
+            uint8_t sfLen = payload[0] & 0x0F;
+            uint8_t dataOffset = 1;
+
+            // Handle CAN-FD extended Single Frame length
+            if (sfLen == 0 && length > 8) {
+                sfLen = payload[1];
+                dataOffset = 2;
+            }
+
+            Can_RxIndication(messageId, &payload[dataOffset], sfLen);
+            break;
+        }
+        case PCI_TYPE_FIRST_FRAME: {
+            uint16_t ffLen = ((payload[0] & 0x0F) << 8) | payload[1];
+            uint8_t dataOffset = 2;
+
+            // Handle CAN-FD extended First Frame length
+            if (ffLen == 0 && length > 8) {
+                ffLen = (payload[2] << 24) | (payload[3] << 16) | (payload[4] << 8) | payload[5];
+                dataOffset = 6;
+            }
+
+            if (ffLen > CANTP_MAX_RX_PAYLOAD) {
+                return; // Payload exceeds our buffer size, drop or reply with FC Overflow
+            }
+
+            for (int i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
+                if (rxChannels[i].state == CANTP_RX_STATE_IDLE) {
+                    rxChannels[i].state = CANTP_RX_STATE_RECEIVING_CF;
+                    rxChannels[i].messageId = messageId;
+                    rxChannels[i].totalSize = ffLen;
+
+                    uint8_t copyLen = length - dataOffset;
+                    memcpy(rxChannels[i].buffer, &payload[dataOffset], copyLen);
+                    rxChannels[i].receivedSize = copyLen;
+                    rxChannels[i].expectedSequenceNumber = 1; // Next CF must be seq 1
+
+                    // Send Flow Control (CTS) back to peer
+                    uint8_t fcFrame[3] = { PCI_TYPE_FLOW_CONTROL | 0x00, 0x00, 0x00 }; // CTS, BS=0, STmin=0
+                    // Note: In automotive setups, request IDs respond on +8 (e.g., 0x7E0 answers on 0x7E8).
+                    uint32_t responseId = (messageId <= 0x7E7) ? messageId + 8 : messageId;
+                    CanIf_Transmit(responseId, fcFrame, 3);
+                    break;
+                }
+            }
+            break;
+        }
+        case PCI_TYPE_CONSECUTIVE_FRAME: {
+            uint8_t seqNum = payload[0] & 0x0F;
+            for (int i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
+                if (rxChannels[i].state == CANTP_RX_STATE_RECEIVING_CF) {
+                    // Note: For a strict implementation, we should also match rxChannels[i].messageId
+                    if (seqNum != rxChannels[i].expectedSequenceNumber) {
+                        rxChannels[i].state = CANTP_RX_STATE_IDLE; // Sequence error, abort
+                        break;
+                    }
+
+                    uint8_t copyLen = length - 1;
+                    // Protect against overflowing the requested total size
+                    if (rxChannels[i].receivedSize + copyLen > rxChannels[i].totalSize) {
+                        copyLen = rxChannels[i].totalSize - rxChannels[i].receivedSize;
+                    }
+
+                    memcpy(&rxChannels[i].buffer[rxChannels[i].receivedSize], &payload[1], copyLen);
+                    rxChannels[i].receivedSize += copyLen;
+                    rxChannels[i].expectedSequenceNumber = (rxChannels[i].expectedSequenceNumber + 1) & 0x0F;
+
+                    // If all bytes received, pass up to the application and free channel
+                    if (rxChannels[i].receivedSize >= rxChannels[i].totalSize) {
+                        Can_RxIndication(rxChannels[i].messageId, rxChannels[i].buffer, rxChannels[i].totalSize);
+                        rxChannels[i].state = CANTP_RX_STATE_IDLE;
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
 }
 
 static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {

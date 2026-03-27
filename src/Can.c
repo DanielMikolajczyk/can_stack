@@ -64,3 +64,9 @@ void Can_MainFunction(void) {
     // Process the transport protocol state machines (for TX and RX)
     CanTp_MainFunction();
 }
+
+void Can_RxIndication(uint32_t messageId, const uint8_t* payload, uint16_t length) {
+    // Provide the clean facade API to pass standard CAN messages
+    // up to the external application layer.
+    App_OnCanMessageReceived(messageId, payload, length);
+}

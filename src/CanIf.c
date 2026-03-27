@@ -1,5 +1,7 @@
 #include "CanIf.h"
 #include <stddef.h>
+#include "CanTp.h"
+#include "Can.h" // For routing standard messages up the stack
 
 // ============================================================================
 // Mock Hardware Driver Layer (e.g., STM32 FDCAN HAL)
@@ -87,4 +89,45 @@ bool CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length)
     HAL_StatusTypeDef status = HAL_FDCAN_AddMessageToTxFifoQ(&txHeader, payload);
 
     return (status == HAL_OK);
+}
+
+// ============================================================================
+// Reception Path
+// ============================================================================
+
+// Helper: Convert CAN-FD DLC code back to byte length
+static uint16_t CanIf_DLCToLength(uint32_t dlc, bool isCanFd) {
+    // Classic CAN limits length to 8 bytes maximum, even if DLC is higher
+    if (!isCanFd && dlc > 8) return 8;
+
+    if (dlc <= 8) return (uint16_t)dlc;
+    switch (dlc) {
+        case 9: return 12;
+        case 10: return 16;
+        case 11: return 20;
+        case 12: return 24;
+        case 13: return 32;
+        case 14: return 48;
+        case 15: return 64;
+        default: return 8;
+    }
+}
+
+// Entry point for the Hardware Driver RX Interrupt
+void CanIf_RxIndication(uint32_t messageId, uint32_t dlc, bool isCanFd, const uint8_t* payload) {
+    if (payload == NULL) return;
+
+    uint16_t length = CanIf_DLCToLength(dlc, isCanFd);
+
+    // Routing heuristic:
+    // Typical ISO-TP Diagnostic IDs range from 0x7E0 to 0x7EF.
+    // TODO: lookup on static configuration table
+    // In a production system, this would be a lookup in a static configuration table.
+    bool isTpMessage = (messageId >= 0x7E0 && messageId <= 0x7EF);
+
+    if (isTpMessage) {
+        CanTp_RxIndication(messageId, payload, length);
+    } else {
+        Can_RxIndication(messageId, payload, length);
+    }
 }
