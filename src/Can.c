@@ -65,8 +65,8 @@ void Can_MainFunction(void) {
     CanTp_MainFunction();
 }
 
-void Can_RxIndication(uint32_t messageId, const uint8_t* payload, uint16_t length) {
+void Can_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, CanPduInfoType_t* const canPduInfo){
     // Provide the clean facade API to pass standard CAN messages
     // up to the external application layer.
-    App_OnCanMessageReceived(messageId, payload, length);
+    // App_OnCanMessageReceived(rxConfig, payload, length);
 }

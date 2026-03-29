@@ -2,32 +2,47 @@
 $Zig = "C:\Users\dmiko\Downloads\zig-x86_64-windows-0.15.2\zig-x86_64-windows-0.15.2\zig.exe"
 
 # --- MANUAL CONFIGURATION ---
-$IncDir  = "inc"
 $Output  = "build/output/cantp_node.exe"
+
+$IncludeDirs = @(
+    "inc",
+    "external/inc"
+)
 
 # Explicitly list your source files here
 $Sources = @(
+    "src/Can_cfg.c",
     "src/Can.c",
     "src/CanIf.c",
     "src/CanSM.c",
     "src/CanTp.c",
     "src/CanTrcv.c",
+    # "external/CanDrv.c",
     "main.c"
 )
-# ----------------------------
+# --- BUILD LOGIC ---
+Write-Host "Starting manual build for CAN Stack..." -ForegroundColor Cyan
 
-Write-Host "Starting manual build for CanTp..." -ForegroundColor Cyan
+# Ensure build directory exists
+if (!(Test-Path "build/output")) { New-Item -ItemType Directory -Path "build/output" -Force }
 
-# Join the array into a single string for the command
-$SourceFiles = $Sources -join " "
+# Map the include directories to "-I" flags
+$IncludeFlags = $IncludeDirs | ForEach-Object { "-I$_" }
 
-# Run zig cc
-# -I: adds include directory
-# -g: includes debug symbols
-& $Zig cc "-I$IncDir" $Sources -o $Output -g -Wall -Wextra
+# Define compiler flags (Senior tip: -Werror ensures you don't ignore warnings)
+$CompileFlags = @(
+    "-g",
+    # "-Wall",
+    # "-Wextra",
+    # "-Werror",
+    "-std=c11"
+)
+
+# Run zig cc using the array of arguments (PowerShell handles the splatting)
+& $Zig cc $IncludeFlags $CompileFlags $Sources -o $Output
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Successfully built: $Output" -ForegroundColor Green
 } else {
-    Write-Host "Build failed." -ForegroundColor Red
+    Write-Host "Build failed with exit code $LASTEXITCODE" -ForegroundColor Red
 }

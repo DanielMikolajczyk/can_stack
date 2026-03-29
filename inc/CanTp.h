@@ -1,8 +1,9 @@
 #ifndef CANTP_H
 #define CANTP_H
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "Std_Types.h"
+#include "CanIf.h"
+#include "Can_cfg.h"
 
 // Initialize the CanTp module and its internal states.
 void CanTp_Init(void);
@@ -16,6 +17,6 @@ bool CanTp_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length)
 void CanTp_MainFunction(void);
 
 // Called by CanIf when an ISO-TP segment is received.
-void CanTp_RxIndication(uint32_t messageId, const uint8_t* payload, uint16_t length);
+void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, CanPduInfoType_t* const canPduInfo);
 
 #endif // CANTP_H

@@ -1,5 +1,7 @@
+#include "Std_Types.h"
+#include "Can_cfg.h"
+#include "CanTypes.h"
 #include "CanIf.h"
-#include <stddef.h>
 #include "CanTp.h"
 #include "Can.h" // For routing standard messages up the stack
 
@@ -56,8 +58,45 @@ static uint32_t CanIf_LengthToDLC(uint16_t length) {
     return 15;                       // Up to 64 bytes
 }
 
+// Helper: Convert CAN-FD DLC code back to byte length
+static uint16_t CanIf_DLCToLength(uint32_t dlc, Can_FrameType type) {
+    // Classic CAN limits length to 8 bytes maximum, even if DLC is higher
+    if ((CAN_FRAME_FD == type) && (dlc > 8u)) return 8u;
+
+    if (dlc <= 8u) return (uint16_t)dlc;
+    switch (dlc) {
+        case 9u: return 12u;
+        case 10u: return 16u;
+        case 11u: return 20u;
+        case 12u: return 24u;
+        case 13u: return 32u;
+        case 14u: return 48u;
+        case 15u: return 64u;
+        default: return 8u;
+    }
+}
+
+static Std_ReturnType_t CanIf_FindCanFrameConfig(const Can_RxPduConfigType* rxConfig, uint8_t hoh, uint32_t canId) {
+    Std_ReturnType_t ret_val = E_NOT_OK;
+
+    (void)rxConfig;
+    (void)hoh;
+    (void)canId;
+    // //TODO multuple RX pdu config for each hoh
+    for (uint16_t i = 0u ; i < CAN_NUM_RX_PDUS; i++) {
+        // TODO - split not by array but different accesses
+        if (canId == CanConfig.RxPduConfig[i].canId) {
+            rxConfig = &(CanConfig.RxPduConfig[i]);
+            ret_val = E_OK;
+            break;
+        }
+    }
+
+    return ret_val;
+}
+
 bool CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length) {
-    if (payload == NULL || length == 0 || length > 64) {
+    if ((payload == NULL_PTR) || (length == 0u) || (length > 64u)) {
         return false;
     }
 
@@ -91,43 +130,26 @@ bool CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length)
     return (status == HAL_OK);
 }
 
-// ============================================================================
-// Reception Path
-// ============================================================================
+void CanIf_RxIndication(const CanIf_HwType_t* const mailboxInfo, CanPduInfoType_t* const canPduInfo) {
+    const Can_RxPduConfigType *rxConfig = NULL_PTR;
+    const uint32_t canId = mailboxInfo->canId;
+    uint16_t length = 0u;
 
-// Helper: Convert CAN-FD DLC code back to byte length
-static uint16_t CanIf_DLCToLength(uint32_t dlc, bool isCanFd) {
-    // Classic CAN limits length to 8 bytes maximum, even if DLC is higher
-    if (!isCanFd && dlc > 8) return 8;
-
-    if (dlc <= 8) return (uint16_t)dlc;
-    switch (dlc) {
-        case 9: return 12;
-        case 10: return 16;
-        case 11: return 20;
-        case 12: return 24;
-        case 13: return 32;
-        case 14: return 48;
-        case 15: return 64;
-        default: return 8;
-    }
-}
-
-// Entry point for the Hardware Driver RX Interrupt
-void CanIf_RxIndication(uint32_t messageId, uint32_t dlc, bool isCanFd, const uint8_t* payload) {
-    if (payload == NULL) return;
-
-    uint16_t length = CanIf_DLCToLength(dlc, isCanFd);
-
-    // Routing heuristic:
-    // Typical ISO-TP Diagnostic IDs range from 0x7E0 to 0x7EF.
-    // TODO: lookup on static configuration table
-    // In a production system, this would be a lookup in a static configuration table.
-    bool isTpMessage = (messageId >= 0x7E0 && messageId <= 0x7EF);
-
-    if (isTpMessage) {
-        CanTp_RxIndication(messageId, payload, length);
+    if (E_NOT_OK == CanIf_FindCanFrameConfig(rxConfig, mailboxInfo->hoh, mailboxInfo->canId)) {
+        //TODO: Det error
     } else {
-        Can_RxIndication(messageId, payload, length);
+
+        length = CanIf_DLCToLength(canPduInfo->sduLength, rxConfig->frameType);
+        /* Fix length for CAN FD */
+        if (CAN_FRAME_FD == rxConfig->frameType) {
+            canPduInfo->sduLength = length;
+        }
+
+        //TODO: Check deffered or instant
+        if (rxConfig->protocol == CAN_TP) {
+            CanTp_RxIndication(rxConfig, canId, canPduInfo);
+        } else {
+            Can_RxIndication(rxConfig, canId, canPduInfo);
+        }
     }
 }
