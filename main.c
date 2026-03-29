@@ -16,8 +16,9 @@ void App_OnCanStateChanged(Can_State_t newState) {
     printf("App Network State Changed: %d\n", newState);
 }
 
-void CanDriver_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t canPdu){
+void CanDriver_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* canPdu, uint32_t dlc){
     CF_Received = true;
+    printf("CAN Driver Transmit: ID: %#x, Length %d", txConfig->canId, canPdu->sduLength);
 }
 
 static void simple_rx_frame(void) {
@@ -87,24 +88,29 @@ static void simple_tx_frame(void) {
         1,2,3,4,5,6,7,8
     };
 
-    const CanIf_HwType_t mailboxInfo = {
-        .canId = 0x18FF0100UL,
-        .hoh = 0,
-        .controllerId = 0,
-    };
-    CanPdu_t canPdu = {
-        .sduLength = 8,
-        .sduDataPtr = payload,
-    };
-    CanIf_RxIndication(&mailboxInfo, &canPdu);
+    uint32_t canId = 0x18FF0001UL;
+    uint16_t length = 8u;
+    Can_Write(canId, payload, length);
 }
+
+static void tp_tx_frame(void) {
+    uint8_t payload[8] = {
+        1,2,3,4,5,6,7,8
+    };
+
+    uint32_t canId = 0x18FF0001UL;
+    uint16_t length = 8u;
+    Can_Write(canId, payload, length);
+}
+
 
 int main(int argc, char *argv[]) {
     Can_Init();
 
     // simple_rx_frame();
     // tp_rx_frame();
-    simple_tx_frame();
+    // simple_tx_frame();
+    tp_tx_frame();
 
     return 0;
 }

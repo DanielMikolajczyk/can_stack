@@ -4,15 +4,9 @@
 #include <stddef.h>
 
 #include "CanSM.h"
-
-// Define the max size for a single frame.
-// We are assuming CAN-FD capability (64 bytes).
-#ifndef CAN_FD_MAX_SINGLE_FRAME_SIZE
-#define CAN_FD_MAX_SINGLE_FRAME_SIZE 64U
-#endif
+#include "Can_cfg.h"
 
 void Can_Init(void) {
-    // Initialize all sub-modules
     CanSM_Init();
     CanTp_Init();
 }
@@ -41,27 +35,49 @@ Can_State_t Can_GetCurrentState(void) {
     }
 }
 
-bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length) {
-    if (payload == NULL || length == 0) {
-        return false;
+Std_ReturnType_t Can_Write(uint32_t canId, const uint8_t* payload, uint16_t length) {
+    const Can_TxPduConfigType* txConfig = NULL_PTR;
+    Std_ReturnType_t ret_val = E_OK;
+    CanPdu_t canPdu = { 0u };
+
+    /* Error checks */
+    if ((NULL_PTR == payload) || (0u == length)) {
+        ;//TODO: det
+        ret_val = E_NOT_OK;
     }
 
-    //TODO: Check if length matches the configuration (?) - drop otherwise (?)
-
-    // Transmission path routing based on payload size
-    if (length <= CAN_FD_MAX_SINGLE_FRAME_SIZE) {
-        // Fits into a single CAN-FD frame
-        return CanIf_Transmit(messageId, payload, length);
-    } else {
-        // Exceeds single frame size, Transport Protocol is needed
-        return CanTp_Transmit(messageId, payload, length);
+    if ((E_NOT_OK == ret_val) || (E_NOT_OK == CanIf_FindTxCanFrameConfig(&txConfig, canId))) {
+        ;//TODO: det ID Not found
+        ret_val = E_NOT_OK;
     }
+
+    if ((E_NOT_OK == ret_val) || (length != txConfig->length)) {
+        ;//TODO: det length doesn't match
+        ret_val = E_NOT_OK;
+    }
+
+    /* Implementation */
+    if (E_OK == ret_val) {
+        canPdu.sduLength = length;
+        canPdu.sduDataPtr = (uint8_t*)payload;
+
+        /* Transmission path routing based on payload size */
+        if (
+            ((CAN_FRAME_CLASSIC == txConfig->frameType) && (CAN_MAX_SINGLE_FRAME_SIZE >= txConfig->length)) ||
+            ((CAN_FRAME_FD == txConfig->frameType) && (CAN_FD_MAX_SINGLE_FRAME_SIZE >= txConfig->length))
+        ) {
+            /* Fits into a single frame */
+            CanIf_Transmit(txConfig, &canPdu);
+        } else {
+            /* Exceeds single frame size, Transport Protocol is needed */
+            (void)CanTp_Transmit(txConfig, &canPdu);
+        }
+    }
+    return ret_val;
 }
 
 void Can_MainFunction(void) {
-    // Process the state machine for network management
     CanSM_MainFunction();
-    // Process the transport protocol state machines (for TX)
     CanTp_MainFunction();
 }
 

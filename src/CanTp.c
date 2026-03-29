@@ -13,19 +13,13 @@
 #define PCI_TYPE_FLOW_CONTROL       0x30
 
 // Maximum number of concurrent TP transmissions.
-#ifndef CANTP_MAX_TX_CHANNELS
 #define CANTP_MAX_TX_CHANNELS 2
-#endif
 
 // Maximum number of concurrent TP receptions.
-#ifndef CANTP_MAX_RX_CHANNELS
 #define CANTP_MAX_RX_CHANNELS 2
-#endif
 
 // Maximum payload size for reassembling a received segmented message
-#ifndef CANTP_MAX_RX_PAYLOAD
 #define CANTP_MAX_RX_PAYLOAD 256
-#endif
 
 // Max payload for a First Frame (8-byte CAN frame: 2 for PCI, 6 for data)
 #define CANTP_FF_MAX_PAYLOAD 6
@@ -47,6 +41,7 @@ typedef struct {
     uint16_t totalSize;
     uint16_t remainingSize;
     uint8_t sequenceNumber;
+    const Can_TxPduConfigType* txConfig;
 
     // Flow Control parameters (to be received from peer)
     uint8_t blockSize;      // Number of CFs to send before next FC
@@ -83,31 +78,31 @@ void CanTp_Init(void) {
     }
 }
 
-bool CanTp_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length) {
-    if (payload == NULL || length == 0) {
-        return false;
-    }
+Std_ReturnType_t CanTp_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* canPdu) {
+    Std_ReturnType_t ret_val = E_NOT_OK;
 
-    // Find an available (idle) transmission channel
+    /* Find an available (idle) transmission channel */
     for (int i = 0; i < CANTP_MAX_TX_CHANNELS; ++i) {
         if (txChannels[i].state == CANTP_TX_STATE_IDLE) {
             CanTp_TxChannel_t* channel = &txChannels[i];
-            channel->messageId = messageId;
-            channel->data = payload;
-            channel->totalSize = length;
-            channel->remainingSize = length;
-            channel->sequenceNumber = 1; // First CF will have sequence number 1
-            channel->blockSize = 0;      // Default: send all frames without waiting for FC
+            channel->messageId = txConfig->canId;
+            channel->data = canPdu->sduDataPtr;
+            channel->totalSize = canPdu->sduLength;
+            channel->remainingSize = canPdu->sduLength;
+            channel->sequenceNumber = 1u;
+            // TODO: blocSize and ST managment
+            channel->blockSize = 0;
+            channel->txConfig = txConfig;
             channel->cfSentInBlock = 0;
 
-            // Kick off the state machine; MainFunction will handle the rest
+            /* Kick off the state machine; MainFunction will handle the rest */
             channel->state = CANTP_TX_STATE_SEND_FF;
-            return true;
+            ret_val = E_OK;
+            break;
         }
     }
 
-    // No channel available
-    return false;
+    return ret_val;
 }
 
 void CanTp_MainFunction(void) {
@@ -139,6 +134,7 @@ void CanTp_MainFunction(void) {
 
 static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
     uint8_t frame_payload[8];
+    CanPdu_t canPdu;
 
     // PCI: 0x1 (FF) and 12-bit length
     frame_payload[0] = PCI_TYPE_FIRST_FRAME | ((channel->totalSize >> 8) & 0x0F);
@@ -148,7 +144,9 @@ static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
     // Copy first part of the data
     memcpy(&frame_payload[2], channel->data, CANTP_FF_MAX_PAYLOAD);
 
-    if (CanIf_Transmit(channel->messageId, frame_payload, 8)) {
+    canPdu.sduDataPtr = frame_payload;
+    canPdu.sduLength = 3u;
+    if (CanIf_Transmit(channel->txConfig, &canPdu)) {
         // Update channel state on successful transmission
         channel->data += CANTP_FF_MAX_PAYLOAD;
         channel->remainingSize -= CANTP_FF_MAX_PAYLOAD;
@@ -159,13 +157,15 @@ static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
 
 void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu) {
     uint32_t canId = rxConfig->canId;
+    uint8_t pciType;
 
-    if (canPdu->sduDataPtr == NULL || canPdu->sduLength == 0) {
+    if ((NULL_PTR == canPdu->sduDataPtr) || (8u >= canPdu->sduLength)) {
         //TODO det
+        // TODO ret_val
         return;
     }
 
-    uint8_t pciType = canPdu->sduDataPtr[0] & 0xF0;
+    pciType = canPdu->sduDataPtr[0] & 0xF0;
 
     switch (pciType) {
         case PCI_TYPE_FLOW_CONTROL: {
@@ -201,34 +201,43 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const can
         case PCI_TYPE_FIRST_FRAME: {
             uint16_t ffLen = ((canPdu->sduDataPtr[0] & 0x0F) << 8) | canPdu->sduDataPtr[1];
             uint8_t dataOffset = 2;
+            const Can_TxPduConfigType* txConfig = NULL_PTR;
+            /* Note: In automotive setups, request IDs respond on +8 (e.g., 0x7E0 answers on 0x7E8). */
+            uint32_t responseId = (canId <= 0x7E7) ? canId + 8 : canId;
 
-            // Handle CAN-FD extended First Frame length
-            if (ffLen == 0 && canPdu->sduLength > 8) {
-                ffLen = (canPdu->sduDataPtr[2] << 24) | (canPdu->sduDataPtr[3] << 16) | (canPdu->sduDataPtr[4] << 8) | canPdu->sduDataPtr[5];
-                dataOffset = 6;
-            }
+            //Check if response frame present
+            if (E_OK == CanIf_FindTxCanFrameConfig(&txConfig, canId)) {
+                // Handle CAN-FD extended First Frame length
+                if (ffLen == 0 && canPdu->sduLength > 8) {
+                    ffLen = (canPdu->sduDataPtr[2] << 24) | (canPdu->sduDataPtr[3] << 16) | (canPdu->sduDataPtr[4] << 8) | canPdu->sduDataPtr[5];
+                    dataOffset = 6;
+                }
 
-            if (ffLen > CANTP_MAX_RX_PAYLOAD) {
-                return; // Payload exceeds our buffer size, drop or reply with FC Overflow
-            }
+                if (ffLen > CANTP_MAX_RX_PAYLOAD) {
+                    // TODO: ret_val
+                    //TODO: det
+                    return; // Payload exceeds our buffer size, drop or reply with FC Overflow
+                }
 
-            for (uint32_t i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
-                if (rxChannels[i].state == CANTP_RX_STATE_IDLE) {
-                    rxChannels[i].state = CANTP_RX_STATE_RECEIVING_CF;
-                    rxChannels[i].messageId = canId;
-                    rxChannels[i].totalSize = ffLen;
+                for (uint32_t i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
+                    if (rxChannels[i].state == CANTP_RX_STATE_IDLE) {
+                        rxChannels[i].state = CANTP_RX_STATE_RECEIVING_CF;
+                        rxChannels[i].messageId = canId;
+                        rxChannels[i].totalSize = ffLen;
 
-                    uint8_t copyLen = canPdu->sduLength - dataOffset;
-                    memcpy(rxChannels[i].buffer, &canPdu->sduDataPtr[dataOffset], copyLen);
-                    rxChannels[i].receivedSize = copyLen;
-                    rxChannels[i].expectedSequenceNumber = 1; // Next CF must be seq 1
+                        uint8_t copyLen = canPdu->sduLength - dataOffset;
+                        memcpy(rxChannels[i].buffer, &canPdu->sduDataPtr[dataOffset], copyLen);
+                        rxChannels[i].receivedSize = copyLen;
+                        rxChannels[i].expectedSequenceNumber = 1; // Next CF must be seq 1
 
-                    // Send Flow Control (CTS) back to peer
-                    uint8_t fcFrame[3] = { PCI_TYPE_FLOW_CONTROL | 0x00, 0x00, 0x00 }; // CTS, BS=0, STmin=0
-                    // Note: In automotive setups, request IDs respond on +8 (e.g., 0x7E0 answers on 0x7E8).
-                    uint32_t responseId = (canId <= 0x7E7) ? canId + 8 : canId;
-                    CanIf_Transmit(responseId, fcFrame, 3);
-                    break;
+                        // Send Flow Control (CTS) back to peer
+                        uint8_t fcFrame[3] = { PCI_TYPE_FLOW_CONTROL | 0x00, 0x00, 0x00 }; // CTS, BS=0, STmin=0
+                        CanPdu_t canPdu;
+                        canPdu.sduDataPtr = fcFrame;
+                        canPdu.sduLength = 3u;
+                        CanIf_Transmit(txConfig, &canPdu);
+                        break;
+                    }
                 }
             }
             break;
@@ -267,33 +276,37 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const can
 }
 
 static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
-    if (channel->remainingSize == 0) {
+    CanPdu_t canPdu;
+    uint8_t framePayload[8];
+    uint8_t bytesToSend = 0u;
+    uint8_t frameLength = 0u;
+
+    if (0u == channel->remainingSize) {
         channel->state = CANTP_TX_STATE_IDLE; // Transmission complete
         return;
     }
 
     // If blockSize is > 0, check if we've sent the whole block
-    if (channel->blockSize > 0 && channel->cfSentInBlock >= channel->blockSize) {
+    if ((channel->blockSize > 0) && (channel->cfSentInBlock >= channel->blockSize)) {
         channel->state = CANTP_TX_STATE_WAIT_FC; // Wait for the next FC
         return;
     }
 
-    uint8_t frame_payload[8];
-    uint8_t bytes_to_send = (channel->remainingSize > CANTP_CF_MAX_PAYLOAD) ? CANTP_CF_MAX_PAYLOAD : channel->remainingSize;
-
+    bytesToSend = (channel->remainingSize > CANTP_CF_MAX_PAYLOAD) ? CANTP_CF_MAX_PAYLOAD : channel->remainingSize;
     // PCI: 0x2 (CF) and 4-bit sequence number
-    frame_payload[0] = PCI_TYPE_CONSECUTIVE_FRAME | (channel->sequenceNumber & 0x0F);
-
+    framePayload[0u] = PCI_TYPE_CONSECUTIVE_FRAME | (channel->sequenceNumber & 0x0F);
     // Copy the next chunk of data
-    memcpy(&frame_payload[1], channel->data, bytes_to_send);
+    memcpy(&framePayload[1u], channel->data, bytesToSend);
 
     // The total length of the CAN frame is 1 (PCI) + data bytes
-    uint8_t frame_dlc = 1 + bytes_to_send;
+    frameLength = 1u + bytesToSend;
+    canPdu.sduDataPtr = framePayload;
+    canPdu.sduLength = frameLength;
 
-    if (CanIf_Transmit(channel->messageId, frame_payload, frame_dlc)) {
+    if (CanIf_Transmit(channel->txConfig, &canPdu)) {
         // Update channel state on successful transmission
-        channel->data += bytes_to_send;
-        channel->remainingSize -= bytes_to_send;
+        channel->data += bytesToSend;
+        channel->remainingSize -= bytesToSend;
         channel->sequenceNumber = (channel->sequenceNumber + 1) & 0x0F;
         channel->cfSentInBlock++;
 

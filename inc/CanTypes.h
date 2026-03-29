@@ -3,6 +3,13 @@
 
 #include "Std_Types.h"
 
+/**************************** DEFINES *****************************/
+
+#define CAN_FD_MAX_SINGLE_FRAME_SIZE (64U)
+#define CAN_MAX_SINGLE_FRAME_SIZE    (8U)
+
+/**************************** ENUMS *****************************/
+
 typedef enum
 {
     CAN_ID_TYPE_STANDARD = 0U,   /* 11-bit (2.0A) */
@@ -45,6 +52,8 @@ typedef enum {
     CANSM_STATE_SLEEP,
     CANSM_STATE_BUS_OFF
 } CanSM_NetworkState_t;
+
+/**************************** TYPEDEFS *****************************/
 
 /** Called by the driver after a Tx frame has been successfully transmitted */
 typedef void (*Can_TxConfirmationType)(uint8_t PduId);

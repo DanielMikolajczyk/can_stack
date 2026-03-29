@@ -5,18 +5,9 @@
 #include "CanIf.h"
 #include "Can_cfg.h"
 
-// Initialize the CanTp module and its internal states.
 void CanTp_Init(void);
-
-// Transport protocol transmission
-// Handles large payload segmentation (ISO-TP)
-bool CanTp_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length);
-
-// Main processing function for CanTp, drives the state machines.
-// This should be called periodically from the main application loop.
 void CanTp_MainFunction(void);
-
-// Called by CanIf when an ISO-TP segment is received.
+Std_ReturnType_t CanTp_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* canPdu);
 void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu);
 
 #endif // CANTP_H

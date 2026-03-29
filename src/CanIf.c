@@ -69,10 +69,11 @@ static uint32_t CanIf_LengthToDLC(uint16_t length) {
 //     }
 // }
 
-static Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType** txConfig, uint32_t canId) {
+//Move to Utils
+Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType** txConfig, uint32_t canId) {
     Std_ReturnType_t ret_val = E_NOT_OK;
 
-    // //TODO multuple TX pdu config for each hoh
+    //TODO multuple TX pdu config for each hoh
     for (uint16_t i = 0u ; i < CAN_NUM_TX_PDUS; i++) {
         // TODO - split not by array but different accesses
         if (canId == CanConfig.TxPduConfig[i].canId) {
@@ -88,7 +89,7 @@ static Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType** t
 static Std_ReturnType_t CanIf_FindRxCanFrameConfig(const Can_RxPduConfigType** rxConfig, uint8_t hoh, uint32_t canId) {
     Std_ReturnType_t ret_val = E_NOT_OK;
 
-    // //TODO multuple RX pdu config for each hoh
+    //TODO multuple RX pdu config for each hoh
     for (uint16_t i = 0u ; i < CAN_NUM_RX_PDUS; i++) {
         // TODO - split not by array but different accesses
         if (canId == CanConfig.RxPduConfig[i].canId) {
@@ -101,24 +102,16 @@ static Std_ReturnType_t CanIf_FindRxCanFrameConfig(const Can_RxPduConfigType** r
     return ret_val;
 }
 
-Std_ReturnType_t CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length) {
+Std_ReturnType_t CanIf_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* canPdu){
     Std_ReturnType_t ret_val = E_NOT_OK;
-    const Can_TxPduConfigType* txConfig = NULL_PTR;
-    CanPdu_t canPdu = { 0u };
     uint32_t dlc;
 
-    if ((payload == NULL_PTR) || (length == 0u) || (length > 64u)) {
+    if ((NULL_PTR == canPdu->sduDataPtr) || (0u == canPdu->sduLength) || (canPdu->sduLength > 64u)) {
         // TODO:Det
         ;
     } else {
-        if (E_OK == CanIf_FindTxCanFrameConfig(&txConfig, messageId)) {
-
-            dlc = CanIf_LengthToDLC(length);
-            canPdu.sduLength  = dlc;
-            canPdu.sduDataPtr = (uint8_t*)payload;
-
-            CanDriver_Transmit(txConfig, canPdu);
-        }
+        dlc = CanIf_LengthToDLC(canPdu->sduLength);
+        CanDriver_Transmit(txConfig, canPdu, dlc);
     }
 
     return ret_val;
