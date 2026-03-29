@@ -4,6 +4,7 @@
 #include "CanIf.h"
 #include "CanTp.h"
 #include "Can.h" // For routing standard messages up the stack
+#include "CanDrv.h" // For routing standard messages up the stack
 
 // ============================================================================
 // Mock Hardware Driver Layer (e.g., STM32 FDCAN HAL)
@@ -50,32 +51,32 @@ static uint32_t CanIf_LengthToDLC(uint16_t length) {
     return 15;                       // Up to 64 bytes
 }
 
-// Helper: Convert CAN-FD DLC code back to byte length
-static uint16_t CanIf_DLCToLength(uint32_t dlc, Can_FrameType type) {
-    // Classic CAN limits length to 8 bytes maximum, even if DLC is higher
-    if ((CAN_FRAME_FD == type) && (dlc > 8u)) return 8u;
+// // Helper: Convert CAN-FD DLC code back to byte length
+// static uint16_t CanIf_DLCToLength(uint32_t dlc, Can_FrameType type) {
+//     // Classic CAN limits length to 8 bytes maximum, even if DLC is higher
+//     if ((CAN_FRAME_FD == type) && (dlc > 8u)) return 8u;
 
-    if (dlc <= 8u) return (uint16_t)dlc;
-    switch (dlc) {
-        case 9u: return 12u;
-        case 10u: return 16u;
-        case 11u: return 20u;
-        case 12u: return 24u;
-        case 13u: return 32u;
-        case 14u: return 48u;
-        case 15u: return 64u;
-        default: return 8u;
-    }
-}
+//     if (dlc <= 8u) return (uint16_t)dlc;
+//     switch (dlc) {
+//         case 9u: return 12u;
+//         case 10u: return 16u;
+//         case 11u: return 20u;
+//         case 12u: return 24u;
+//         case 13u: return 32u;
+//         case 14u: return 48u;
+//         case 15u: return 64u;
+//         default: return 8u;
+//     }
+// }
 
-static Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType* txConfig, uint32_t canId) {
+static Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType** txConfig, uint32_t canId) {
     Std_ReturnType_t ret_val = E_NOT_OK;
 
     // //TODO multuple TX pdu config for each hoh
     for (uint16_t i = 0u ; i < CAN_NUM_TX_PDUS; i++) {
         // TODO - split not by array but different accesses
         if (canId == CanConfig.TxPduConfig[i].canId) {
-            txConfig = &(CanConfig.TxPduConfig[i]);
+            *txConfig = &(CanConfig.TxPduConfig[i]);
             ret_val = E_OK;
             break;
         }
@@ -84,14 +85,14 @@ static Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType* tx
     return ret_val;
 }
 
-static Std_ReturnType_t CanIf_FindRxCanFrameConfig(const Can_RxPduConfigType* rxConfig, uint8_t hoh, uint32_t canId) {
+static Std_ReturnType_t CanIf_FindRxCanFrameConfig(const Can_RxPduConfigType** rxConfig, uint8_t hoh, uint32_t canId) {
     Std_ReturnType_t ret_val = E_NOT_OK;
 
     // //TODO multuple RX pdu config for each hoh
     for (uint16_t i = 0u ; i < CAN_NUM_RX_PDUS; i++) {
         // TODO - split not by array but different accesses
         if (canId == CanConfig.RxPduConfig[i].canId) {
-            rxConfig = &(CanConfig.RxPduConfig[i]);
+            *rxConfig = &(CanConfig.RxPduConfig[i]);
             ret_val = E_OK;
             break;
         }
@@ -106,18 +107,17 @@ Std_ReturnType_t CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint
     CanPdu_t canPdu = { 0u };
     uint32_t dlc;
 
-    if ((payload != NULL_PTR) || (length == 0u) || (length > 64u)) {
+    if ((payload == NULL_PTR) || (length == 0u) || (length > 64u)) {
         // TODO:Det
         ;
     } else {
-        if (E_OK == CanIf_FindTxCanFrameConfig(txConfig, messageId)) {
+        if (E_OK == CanIf_FindTxCanFrameConfig(&txConfig, messageId)) {
 
             dlc = CanIf_LengthToDLC(length);
             canPdu.sduLength  = dlc;
             canPdu.sduDataPtr = (uint8_t*)payload;
 
-            //TODO:
-            // CanDriver_Transmit(txConfig->HwObjectRef, canPdu);
+            CanDriver_Transmit(txConfig, canPdu);
         }
     }
 
@@ -125,19 +125,13 @@ Std_ReturnType_t CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint
 }
 
 void CanIf_RxIndication(const CanIf_HwType_t* const mailboxInfo, CanPdu_t* const canPdu) {
-    const Can_RxPduConfigType *rxConfig = NULL_PTR;
+    const Can_RxPduConfigType* rxConfig = NULL_PTR;
     const uint32_t canId = mailboxInfo->canId;
     uint16_t length = 0u;
 
-    if (E_NOT_OK == CanIf_FindRxCanFrameConfig(rxConfig, mailboxInfo->hoh, mailboxInfo->canId)) {
+    if (E_NOT_OK == CanIf_FindRxCanFrameConfig(&rxConfig, mailboxInfo->hoh, mailboxInfo->canId)) {
         //TODO: Det error
     } else {
-
-        length = CanIf_DLCToLength(canPdu->sduLength, rxConfig->frameType);
-        /* Fix length for CAN FD */
-        if (CAN_FRAME_FD == rxConfig->frameType) {
-            canPdu->sduLength = length;
-        }
 
         //TODO: Check deffered or instant
         if (rxConfig->protocol == CAN_TP) {

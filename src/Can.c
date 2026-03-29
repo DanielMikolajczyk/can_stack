@@ -61,12 +61,14 @@ bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length) {
 void Can_MainFunction(void) {
     // Process the state machine for network management
     CanSM_MainFunction();
-    // Process the transport protocol state machines (for TX and RX)
+    // Process the transport protocol state machines (for TX)
     CanTp_MainFunction();
 }
 
+#include <stdio.h>
 void Can_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu){
     // Provide the clean facade API to pass standard CAN messages
     // up to the external application layer.
     // App_OnCanMessageReceived(rxConfig, payload, length);
+    printf("frame received\n");
 }

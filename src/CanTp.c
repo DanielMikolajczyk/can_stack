@@ -212,7 +212,7 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const can
                 return; // Payload exceeds our buffer size, drop or reply with FC Overflow
             }
 
-            for (int i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
+            for (uint32_t i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
                 if (rxChannels[i].state == CANTP_RX_STATE_IDLE) {
                     rxChannels[i].state = CANTP_RX_STATE_RECEIVING_CF;
                     rxChannels[i].messageId = canId;
@@ -235,7 +235,7 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const can
         }
         case PCI_TYPE_CONSECUTIVE_FRAME: {
             uint8_t seqNum = canPdu->sduDataPtr[0] & 0x0F;
-            for (int i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
+            for (uint32_t i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
                 if (rxChannels[i].state == CANTP_RX_STATE_RECEIVING_CF) {
                     // Note: For a strict implementation, we should also match rxChannels[i].messageId
                     if (seqNum != rxChannels[i].expectedSequenceNumber) {

@@ -134,6 +134,18 @@ const Can_TxPduConfigType CanCfg_TxPdu[CAN_NUM_TX_PDUS] =
         .HwObjectRef    = CAN_HW_OBJ_TX_0,
         .TxConfirmation = NULL_PTR,
     },
+
+    {
+        .canId        = 0x18FF0102UL,
+        .canIdType    = CAN_ID_TYPE_EXTENDED,
+        .frameType    = CAN_FRAME_CLASSIC,
+        .protocol     = CAN_IF,
+        .length       = 8u,
+        .CyclicPeriodMs = 0U,
+        .globalTxId      = 3u,
+        .HwObjectRef    = CAN_HW_OBJ_TX_0,
+        .TxConfirmation = NULL_PTR,
+    },
 };
 
 /* =========================================================================
@@ -231,13 +243,13 @@ const Can_RxPduConfigType CanCfg_RxPdu[CAN_NUM_RX_PDUS] =
     /* ------------------------------------------------------------------ */
     {
         .canId        = 0x18FF0102UL,
-        .canIdType    = CAN_ID_TYPE_EXTENDED,
-        .frameType    = CAN_FRAME_CLASSIC,
-        .protocol     = CAN_IF,
-        .length       = 8u,
+        .canIdType    = CAN_ID_TYPE_FD,
+        .frameType    = CAN_FRAME_FD,
+        .protocol     = CAN_TP,
+        .length       = 184u,
         .timeoutMs    = 10u,
         .globalRxId   = 0u
-    }
+    },
 };
 
 /* =========================================================================

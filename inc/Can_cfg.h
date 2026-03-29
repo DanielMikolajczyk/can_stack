@@ -13,7 +13,7 @@
 /* =========================================================================
  * 1.  CONFIGURATION SIZES
  * ========================================================================= */
-#define CAN_NUM_TX_PDUS     4U
+#define CAN_NUM_TX_PDUS     5U
 #define CAN_NUM_RX_PDUS     4U
 #define CAN_NUM_HW_OBJECTS  6U   /* 4 Tx buffers + 2 Rx FIFOs */
 
