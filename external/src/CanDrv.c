@@ -13,7 +13,7 @@ void CAN_Mailbox0_Interrupt_Handler(void) {
     uint32_t can_dlc;
     uint8_t payload_buffer[64]; // Allocate actual memory (64 bytes for CAN-FD, 8 for Standard)
     CanIf_HwType_t mailboxInfo;
-    CanPduInfoType_t canPduInfo;
+    CanPdu_t canPdu;
 
     // 1. Read Metadata from Registers
     CanDriver_ReadReg(REG_CAN_MB0_RX_ID, &can_id);
@@ -30,10 +30,10 @@ void CAN_Mailbox0_Interrupt_Handler(void) {
     mailboxInfo.hoh = 0;           // We know this is Mailbox 0 based on the interrupt
     mailboxInfo.controllerId = 0;  // Controller 0
 
-    canPduInfo.sduLength = can_dlc;   // Assuming your driver already converted DLC code to byte length
-    canPduInfo.sduDataPtr = payload_buffer; // Point to our local array!
+    canPdu.sduLength = can_dlc;   // Assuming your driver already converted DLC code to byte length
+    canPdu.sduDataPtr = payload_buffer; // Point to our local array!
 
     // 4. Pass across the boundary!
     // The driver passes the Mailbox info. CanIf will figure out the PDU ID.
-    CanIf_RxIndication(&mailboxInfo, &canPduInfo);
+    CanIf_RxIndication(&mailboxInfo, &canPdu);
 }

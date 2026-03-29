@@ -157,18 +157,23 @@ static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
     // If transmit fails, we will retry on the next CanTp_MainFunction call.
 }
 
-void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, CanPduInfoType_t* const canPduInfo) {
-    if (canPduInfo->sduDataPtr == NULL || canPduInfo->sduLength == 0) return;
+void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu) {
+    uint32_t canId = rxConfig->canId;
 
-    uint8_t pciType = canPduInfo->sduDataPtr[0] & 0xF0;
+    if (canPdu->sduDataPtr == NULL || canPdu->sduLength == 0) {
+        //TODO det
+        return;
+    }
+
+    uint8_t pciType = canPdu->sduDataPtr[0] & 0xF0;
 
     switch (pciType) {
         case PCI_TYPE_FLOW_CONTROL: {
-            uint8_t flowStatus = canPduInfo->sduDataPtr[0] & 0x0F;
+            uint8_t flowStatus = canPdu->sduDataPtr[0] & 0x0F;
             for (int i = 0; i < CANTP_MAX_TX_CHANNELS; ++i) {
                 if (txChannels[i].state == CANTP_TX_STATE_WAIT_FC) {
                     if (flowStatus == 0) { // Clear To Send (CTS)
-                        txChannels[i].blockSize = canPduInfo->sduDataPtr[1];
+                        txChannels[i].blockSize = canPdu->sduDataPtr[1];
                         txChannels[i].cfSentInBlock = 0;
                         txChannels[i].state = CANTP_TX_STATE_SEND_CF;
                     } else if (flowStatus == 2) { // Overflow (Receiver buffer full)
@@ -181,25 +186,25 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, Can
             break;
         }
         case PCI_TYPE_SINGLE_FRAME: {
-            uint8_t sfLen = canPduInfo->sduDataPtr[0] & 0x0F;
+            uint8_t sfLen = canPdu->sduDataPtr[0] & 0x0F;
             uint8_t dataOffset = 1;
 
             // Handle CAN-FD extended Single Frame length
-            if (sfLen == 0 && canPduInfo->sduLength > 8) {
-                sfLen = canPduInfo->sduDataPtr[1];
+            if (sfLen == 0 && canPdu->sduLength > 8) {
+                sfLen = canPdu->sduDataPtr[1];
                 dataOffset = 2;
             }
 
-            Can_RxIndication(rxConfig, canId, canPduInfo);
+            Can_RxIndication(rxConfig, canPdu);
             break;
         }
         case PCI_TYPE_FIRST_FRAME: {
-            uint16_t ffLen = ((canPduInfo->sduDataPtr[0] & 0x0F) << 8) | canPduInfo->sduDataPtr[1];
+            uint16_t ffLen = ((canPdu->sduDataPtr[0] & 0x0F) << 8) | canPdu->sduDataPtr[1];
             uint8_t dataOffset = 2;
 
             // Handle CAN-FD extended First Frame length
-            if (ffLen == 0 && canPduInfo->sduLength > 8) {
-                ffLen = (canPduInfo->sduDataPtr[2] << 24) | (canPduInfo->sduDataPtr[3] << 16) | (canPduInfo->sduDataPtr[4] << 8) | canPduInfo->sduDataPtr[5];
+            if (ffLen == 0 && canPdu->sduLength > 8) {
+                ffLen = (canPdu->sduDataPtr[2] << 24) | (canPdu->sduDataPtr[3] << 16) | (canPdu->sduDataPtr[4] << 8) | canPdu->sduDataPtr[5];
                 dataOffset = 6;
             }
 
@@ -213,8 +218,8 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, Can
                     rxChannels[i].messageId = canId;
                     rxChannels[i].totalSize = ffLen;
 
-                    uint8_t copyLen = canPduInfo->sduLength - dataOffset;
-                    memcpy(rxChannels[i].buffer, &canPduInfo->sduDataPtr[dataOffset], copyLen);
+                    uint8_t copyLen = canPdu->sduLength - dataOffset;
+                    memcpy(rxChannels[i].buffer, &canPdu->sduDataPtr[dataOffset], copyLen);
                     rxChannels[i].receivedSize = copyLen;
                     rxChannels[i].expectedSequenceNumber = 1; // Next CF must be seq 1
 
@@ -229,7 +234,7 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, Can
             break;
         }
         case PCI_TYPE_CONSECUTIVE_FRAME: {
-            uint8_t seqNum = canPduInfo->sduDataPtr[0] & 0x0F;
+            uint8_t seqNum = canPdu->sduDataPtr[0] & 0x0F;
             for (int i = 0; i < CANTP_MAX_RX_CHANNELS; ++i) {
                 if (rxChannels[i].state == CANTP_RX_STATE_RECEIVING_CF) {
                     // Note: For a strict implementation, we should also match rxChannels[i].messageId
@@ -238,19 +243,19 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, Can
                         break;
                     }
 
-                    uint8_t copyLen = canPduInfo->sduLength - 1;
+                    uint8_t copyLen = canPdu->sduLength - 1;
                     // Protect against overflowing the requested total size
                     if (rxChannels[i].receivedSize + copyLen > rxChannels[i].totalSize) {
                         copyLen = rxChannels[i].totalSize - rxChannels[i].receivedSize;
                     }
 
-                    memcpy(&rxChannels[i].buffer[rxChannels[i].receivedSize], &canPduInfo->sduDataPtr[1], copyLen);
+                    memcpy(&rxChannels[i].buffer[rxChannels[i].receivedSize], &canPdu->sduDataPtr[1], copyLen);
                     rxChannels[i].receivedSize += copyLen;
                     rxChannels[i].expectedSequenceNumber = (rxChannels[i].expectedSequenceNumber + 1) & 0x0F;
 
                     // If all bytes received, pass up to the application and free channel
                     if (rxChannels[i].receivedSize >= rxChannels[i].totalSize) {
-                        Can_RxIndication(rxConfig, canId, canPduInfo);
+                        Can_RxIndication(rxConfig, canPdu);
                         rxChannels[i].state = CANTP_RX_STATE_IDLE;
                     }
                     break;

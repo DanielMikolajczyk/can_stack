@@ -16,7 +16,7 @@ bool Can_Write(uint32_t messageId, const uint8_t* payload, uint16_t length);
 void Can_MainFunction(void);
 
 // Internal routing callback (called by CanIf for standard messages)
-void Can_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, CanPduInfoType_t* const canPduInfo);
+void Can_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu);
 
 // Callbacks (To be implemented by the outer Application)
 extern void App_OnCanMessageReceived(uint32_t messageId, const uint8_t* payload, uint16_t length);

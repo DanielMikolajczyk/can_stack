@@ -62,18 +62,19 @@ typedef struct {
 typedef struct {
     uint32_t sduLength;
     uint8_t* sduDataPtr;
-} CanPduInfoType_t;
+} CanPdu_t;
 
 typedef struct
 {
-    uint8_t               PduId;
-    uint32_t              CanId;
-    Can_IdType            CanIdType;
-    Can_FrameType         FrameType;
-    uint8_t               Length;
-    Can_TxConfirmationType TxConfirmation;
-    uint16_t              CyclicPeriodMs;  /* 0 = event-driven */
+    uint32_t              canId;
+    Can_IdType            canIdType;
+    Can_FrameType         frameType;
+    Can_ProtocolType      protocol;
+    uint32_t              length;
+    uint16_t              CyclicPeriodMs;   /* 0 = event-driven */
+    uint32_t              globalTxId;       /* 0 = no supervision */
     uint8_t               HwObjectRef;
+    Can_TxConfirmationType TxConfirmation;
 } Can_TxPduConfigType;
 
 typedef struct

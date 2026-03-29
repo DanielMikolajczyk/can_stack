@@ -56,15 +56,17 @@ const Can_TxPduConfigType CanCfg_TxPdu[CAN_NUM_TX_PDUS] =
     /*     [7]     Checksum         uint8,  XOR of bytes 0–6              */
     /* ------------------------------------------------------------------ */
     {
-        .PduId          = CAN_TX_PDU_ENGINE_STATUS,
-        .CanId          = 0x18FF0001UL,          /* J1939-style PGN area  */
-        .CanIdType      = CAN_ID_TYPE_EXTENDED,
-        .FrameType      = CAN_FRAME_CLASSIC,
-        .Length            = 8U,
-        .TxConfirmation = NULL_PTR,
+        .canId        = 0x18FF0001UL,
+        .canIdType    = CAN_ID_TYPE_EXTENDED,
+        .frameType    = CAN_FRAME_CLASSIC,
+        .protocol     = CAN_IF,
+        .length       = 8u,
         .CyclicPeriodMs = 10U,
-        .HwObjectRef    = CAN_HW_OBJ_TX_0
+        .globalTxId      = 0u,
+        .HwObjectRef    = CAN_HW_OBJ_TX_0,
+        .TxConfirmation = NULL_PTR,
     },
+
 
     /* ------------------------------------------------------------------ */
     /* PDU 1 – FUEL_INJECTION  (CAN 2.0B, 29-bit, 8 bytes, 5 ms cyclic) */
@@ -76,14 +78,15 @@ const Can_TxPduConfigType CanCfg_TxPdu[CAN_NUM_TX_PDUS] =
     /*     [6..7]  Reserved         uint16, 0x0000                        */
     /* ------------------------------------------------------------------ */
     {
-        .PduId          = CAN_TX_PDU_FUEL_INJECTION,
-        .CanId          = 0x18FF0002UL,
-        .CanIdType      = CAN_ID_TYPE_EXTENDED,
-        .FrameType      = CAN_FRAME_CLASSIC,
-        .Length            = 8U,
+        .canId        = 0x18FF0002UL,
+        .canIdType    = CAN_ID_TYPE_EXTENDED,
+        .frameType    = CAN_FRAME_CLASSIC,
+        .protocol     = CAN_IF,
+        .length       = 8u,
+        .CyclicPeriodMs = 20U,
+        .globalTxId      = 1u,
+        .HwObjectRef    = CAN_HW_OBJ_TX_0,
         .TxConfirmation = NULL_PTR,
-        .CyclicPeriodMs = 5U,
-        .HwObjectRef    = CAN_HW_OBJ_TX_1
     },
 
     /* ------------------------------------------------------------------ */
@@ -96,14 +99,15 @@ const Can_TxPduConfigType CanCfg_TxPdu[CAN_NUM_TX_PDUS] =
     /*     [7]     Checksum         uint8,  XOR of bytes 0–6             */
     /* ------------------------------------------------------------------ */
     {
-        .PduId          = CAN_TX_PDU_VEHICLE_SPEED,
-        .CanId          = 0x18FF0010UL,
-        .CanIdType      = CAN_ID_TYPE_EXTENDED,
-        .FrameType      = CAN_FRAME_CLASSIC,
-        .Length            = 8U,
+        .canId        = 0x18FF0010UL,
+        .canIdType    = CAN_ID_TYPE_EXTENDED,
+        .frameType    = CAN_FRAME_CLASSIC,
+        .protocol     = CAN_IF,
+        .length       = 8u,
+        .CyclicPeriodMs = 0U,
+        .globalTxId      = 2u,
+        .HwObjectRef    = CAN_HW_OBJ_TX_0,
         .TxConfirmation = NULL_PTR,
-        .CyclicPeriodMs = 20U,
-        .HwObjectRef    = CAN_HW_OBJ_TX_2
     },
 
     /* ------------------------------------------------------------------ */
@@ -120,15 +124,16 @@ const Can_TxPduConfigType CanCfg_TxPdu[CAN_NUM_TX_PDUS] =
     /*     [14..15] WheelAccelRR                                          */
     /* ------------------------------------------------------------------ */
     {
-        .PduId          = CAN_TX_PDU_WHEEL_SPEED,
-        .CanId          = 0x18FF0011UL,
-        .CanIdType      = CAN_ID_TYPE_EXTENDED,
-        .FrameType      = CAN_FRAME_FD,
-        .Length         = 16U,
+        .canId        = 0x18FF0011UL,
+        .canIdType    = CAN_ID_TYPE_FD,
+        .frameType    = CAN_FRAME_FD,
+        .protocol     = CAN_IF,
+        .length       = 8u,
+        .CyclicPeriodMs = 0U,
+        .globalTxId      = 3u,
+        .HwObjectRef    = CAN_HW_OBJ_TX_0,
         .TxConfirmation = NULL_PTR,
-        .CyclicPeriodMs = 10U,
-        .HwObjectRef    = CAN_HW_OBJ_TX_3
-    }
+    },
 };
 
 /* =========================================================================

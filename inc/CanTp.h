@@ -17,6 +17,6 @@ bool CanTp_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length)
 void CanTp_MainFunction(void);
 
 // Called by CanIf when an ISO-TP segment is received.
-void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, uint32_t canId, CanPduInfoType_t* const canPduInfo);
+void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu);
 
 #endif // CANTP_H

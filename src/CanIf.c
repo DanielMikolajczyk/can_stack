@@ -34,14 +34,6 @@ typedef struct {
 #define FDCAN_BRS_ON       (0x00000001U)
 #define FDCAN_BRS_OFF      (0x00000000U)
 
-// Mock transmission function
-static HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(FDCAN_TxHeaderTypeDef *pTxHeader, const uint8_t *pTxData) {
-    // In a real environment, this copies the header and data into the FDCAN peripheral's TX FIFO.
-    (void)pTxHeader;
-    (void)pTxData;
-    return HAL_OK;
-}
-
 // ============================================================================
 // CanIf Implementation
 // ============================================================================
@@ -76,12 +68,25 @@ static uint16_t CanIf_DLCToLength(uint32_t dlc, Can_FrameType type) {
     }
 }
 
-static Std_ReturnType_t CanIf_FindCanFrameConfig(const Can_RxPduConfigType* rxConfig, uint8_t hoh, uint32_t canId) {
+static Std_ReturnType_t CanIf_FindTxCanFrameConfig(const Can_TxPduConfigType* txConfig, uint32_t canId) {
     Std_ReturnType_t ret_val = E_NOT_OK;
 
-    (void)rxConfig;
-    (void)hoh;
-    (void)canId;
+    // //TODO multuple TX pdu config for each hoh
+    for (uint16_t i = 0u ; i < CAN_NUM_TX_PDUS; i++) {
+        // TODO - split not by array but different accesses
+        if (canId == CanConfig.TxPduConfig[i].canId) {
+            txConfig = &(CanConfig.TxPduConfig[i]);
+            ret_val = E_OK;
+            break;
+        }
+    }
+
+    return ret_val;
+}
+
+static Std_ReturnType_t CanIf_FindRxCanFrameConfig(const Can_RxPduConfigType* rxConfig, uint8_t hoh, uint32_t canId) {
+    Std_ReturnType_t ret_val = E_NOT_OK;
+
     // //TODO multuple RX pdu config for each hoh
     for (uint16_t i = 0u ; i < CAN_NUM_RX_PDUS; i++) {
         // TODO - split not by array but different accesses
@@ -95,61 +100,50 @@ static Std_ReturnType_t CanIf_FindCanFrameConfig(const Can_RxPduConfigType* rxCo
     return ret_val;
 }
 
-bool CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length) {
-    if ((payload == NULL_PTR) || (length == 0u) || (length > 64u)) {
-        return false;
-    }
+Std_ReturnType_t CanIf_Transmit(uint32_t messageId, const uint8_t* payload, uint16_t length) {
+    Std_ReturnType_t ret_val = E_NOT_OK;
+    const Can_TxPduConfigType* txConfig = NULL_PTR;
+    CanPdu_t canPdu = { 0u };
+    uint32_t dlc;
 
-    FDCAN_TxHeaderTypeDef txHeader;
-
-    // Determine if the ID is Standard (11-bit) or Extended (29-bit)
-    // Standard IDs max out at 0x7FF
-    if (messageId > 0x7FF) {
-        txHeader.Identifier = messageId & 0x1FFFFFFF;
-        txHeader.IdType = FDCAN_EXTENDED_ID;
+    if ((payload != NULL_PTR) || (length == 0u) || (length > 64u)) {
+        // TODO:Det
+        ;
     } else {
-        txHeader.Identifier = messageId & 0x7FF;
-        txHeader.IdType = FDCAN_STANDARD_ID;
+        if (E_OK == CanIf_FindTxCanFrameConfig(txConfig, messageId)) {
+
+            dlc = CanIf_LengthToDLC(length);
+            canPdu.sduLength  = dlc;
+            canPdu.sduDataPtr = (uint8_t*)payload;
+
+            //TODO:
+            // CanDriver_Transmit(txConfig->HwObjectRef, canPdu);
+        }
     }
 
-    txHeader.TxFrameType = FDCAN_DATA_FRAME;
-    txHeader.DataLength = CanIf_LengthToDLC(length);
-
-    // Assume CAN-FD format with Bit Rate Switching (BRS) for anything larger than 8 bytes
-    if (length > 8) {
-        txHeader.FDFormat = FDCAN_FD_CAN;
-        txHeader.BitRateSwitch = FDCAN_BRS_ON;
-    } else {
-        txHeader.FDFormat = FDCAN_CLASSIC_CAN;
-        txHeader.BitRateSwitch = FDCAN_BRS_OFF;
-    }
-
-    // Pass to hardware driver
-    HAL_StatusTypeDef status = HAL_FDCAN_AddMessageToTxFifoQ(&txHeader, payload);
-
-    return (status == HAL_OK);
+    return ret_val;
 }
 
-void CanIf_RxIndication(const CanIf_HwType_t* const mailboxInfo, CanPduInfoType_t* const canPduInfo) {
+void CanIf_RxIndication(const CanIf_HwType_t* const mailboxInfo, CanPdu_t* const canPdu) {
     const Can_RxPduConfigType *rxConfig = NULL_PTR;
     const uint32_t canId = mailboxInfo->canId;
     uint16_t length = 0u;
 
-    if (E_NOT_OK == CanIf_FindCanFrameConfig(rxConfig, mailboxInfo->hoh, mailboxInfo->canId)) {
+    if (E_NOT_OK == CanIf_FindRxCanFrameConfig(rxConfig, mailboxInfo->hoh, mailboxInfo->canId)) {
         //TODO: Det error
     } else {
 
-        length = CanIf_DLCToLength(canPduInfo->sduLength, rxConfig->frameType);
+        length = CanIf_DLCToLength(canPdu->sduLength, rxConfig->frameType);
         /* Fix length for CAN FD */
         if (CAN_FRAME_FD == rxConfig->frameType) {
-            canPduInfo->sduLength = length;
+            canPdu->sduLength = length;
         }
 
         //TODO: Check deffered or instant
         if (rxConfig->protocol == CAN_TP) {
-            CanTp_RxIndication(rxConfig, canId, canPduInfo);
+            CanTp_RxIndication(rxConfig, canPdu);
         } else {
-            Can_RxIndication(rxConfig, canId, canPduInfo);
+            Can_RxIndication(rxConfig, canPdu);
         }
     }
 }
