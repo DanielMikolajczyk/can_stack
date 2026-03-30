@@ -134,3 +134,15 @@ void CanIf_RxIndication(const CanIf_HwType_t* const mailboxInfo, CanPdu_t* const
         }
     }
 }
+
+Std_ReturnType_t CanIf_SetControllerMode(uint8_t controllerId, CanIf_ControllerMode_t controllerMode) {
+    /* Propagate the mode change down to the hardware driver */
+    return CanDriver_SetControllerMode(controllerId, controllerMode);
+}
+
+//TODO: remove from here
+Std_ReturnType_t CanDriver_SetControllerMode(uint8_t controllerId, CanIf_ControllerMode_t controllerMode) {
+    // TODO: Write to hardware registers (e.g. clear Init/Sleep bits)
+    printf("CanDriver: Controller %d mode set to %d\n", controllerId, controllerMode);
+    return E_OK;
+}

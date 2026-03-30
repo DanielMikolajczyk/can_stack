@@ -10,6 +10,12 @@
 #define E_OK        (0u)
 #define E_NOT_OK    (1u)
 
+#ifndef UNIT_TESTS
+    #define STATIC static
+#else
+    #define STATIC
+#endif /* UNIT_TESTS */
+
 typedef uint8_t Std_ReturnType_t;
 
 #endif /* STD_TYPES_HEADER_GUARD */

@@ -7,7 +7,7 @@
 void CanSM_Init(void);
 void CanSM_MainFunction(void);
 
-bool CanSM_RequestState(CanSM_NetworkState_t targetState);
+Std_ReturnType_t CanSM_RequestState(CanSM_NetworkState_t targetState);
 CanSM_NetworkState_t CanSM_GetCurrentState(void);
 
 // Event notifications from lower layers (e.g., CanIf / CanTrcv)

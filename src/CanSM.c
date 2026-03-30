@@ -1,80 +1,83 @@
 #include "CanSM.h"
-#include <stddef.h>
+#include "CanIf.h"
 
-static CanSM_NetworkState_t currentState = CANSM_STATE_UNINIT;
-static CanSM_NetworkState_t requestedState = CANSM_STATE_UNINIT;
+STATIC CanSM_NetworkState_t CanSM_CurrentState = CANSM_STATE_UNINIT;
+STATIC CanSM_NetworkState_t CanSM_RequestedState = CANSM_STATE_UNINIT;
 
 // Flags for asynchronous hardware events.
 // In a real environment, these are usually set via ISRs, so consider atomic blocks if needed.
-static bool busWakeupPending = false;
-static bool busOffPending = false;
+STATIC bool CanSM_BusWakeupPending = false;
+STATIC bool CanSM_BusOffPending = false;
 
 void CanSM_Init(void) {
-    currentState = CANSM_STATE_OFFLINE;
-    requestedState = CANSM_STATE_OFFLINE;
-    busWakeupPending = false;
-    busOffPending = false;
+    CanSM_CurrentState = CANSM_STATE_OFFLINE;
+    CanSM_RequestedState = CANSM_STATE_OFFLINE;
+    CanSM_BusWakeupPending = false;
+    CanSM_BusOffPending = false;
 }
 
-bool CanSM_RequestState(CanSM_NetworkState_t targetState) {
-    if (currentState == CANSM_STATE_UNINIT) {
-        return false; // Cannot request state transitions before initialization
+Std_ReturnType_t CanSM_RequestState(CanSM_NetworkState_t targetState) {
+    Std_ReturnType_t ret_val = E_NOT_OK;
+    if (CANSM_STATE_UNINIT != CanSM_CurrentState) {
+        /* Cannot request state transitions before initialization */
+        ret_val = E_OK;
     }
-    requestedState = targetState;
-    return true;
+    CanSM_RequestedState = targetState;
+    return ret_val;
 }
 
 CanSM_NetworkState_t CanSM_GetCurrentState(void) {
-    return currentState;
+    return CanSM_CurrentState;
 }
 
 void CanSM_ReportBusWakeup(void) {
-    busWakeupPending = true;
+    CanSM_BusWakeupPending = true;
 }
 
 void CanSM_ReportBusOff(void) {
-    busOffPending = true;
+    CanSM_BusOffPending = true;
 }
 
 void CanSM_MainFunction(void) {
-    if (currentState == CANSM_STATE_UNINIT) {
+    if (CanSM_CurrentState == CANSM_STATE_UNINIT) {
         return;
     }
 
     // 1. Process Hardware Events (Highest Priority)
-    if (busOffPending) {
-        busOffPending = false;
-        currentState = CANSM_STATE_BUS_OFF;
-        requestedState = CANSM_STATE_OFFLINE; // Reset request to force a controlled recovery later
-        // TODO: Command CanIf to stop TX/RX immediately
+    if (CanSM_BusOffPending) {
+        CanSM_BusOffPending = false;
+        CanSM_CurrentState = CANSM_STATE_BUS_OFF;
+        CanSM_RequestedState = CANSM_STATE_OFFLINE; // Reset request to force a controlled recovery later
+        CanIf_SetControllerMode(0, CANIF_CS_STOPPED); // Assuming Controller 0
     }
 
-    if (busWakeupPending) {
-        busWakeupPending = false;
-        if (currentState == CANSM_STATE_SLEEP) {
-            currentState = CANSM_STATE_ONLINE;
-            requestedState = CANSM_STATE_ONLINE;
-            // TODO: Command CanTrcv to NORMAL, CanIf to ONLINE
+    if (CanSM_BusWakeupPending) {
+        CanSM_BusWakeupPending = false;
+        if (CanSM_CurrentState == CANSM_STATE_SLEEP) {
+            CanSM_CurrentState = CANSM_STATE_ONLINE;
+            CanSM_RequestedState = CANSM_STATE_ONLINE;
+            // TODO: Command CanTrcv to NORMAL
+            CanIf_SetControllerMode(0, CANIF_CS_STARTED);
         }
     }
 
     // 2. Process Requested State Transitions
-    if (requestedState != currentState) {
-        switch (requestedState) {
+    if (CanSM_RequestedState != CanSM_CurrentState) {
+        switch (CanSM_RequestedState) {
             case CANSM_STATE_ONLINE:
-                if (currentState == CANSM_STATE_OFFLINE || currentState == CANSM_STATE_SLEEP) {
-                    // TODO: Call CanTrcv and CanIf to enable hardware
-                    currentState = CANSM_STATE_ONLINE;
+                if ((CANSM_STATE_OFFLINE == CanSM_CurrentState) || (CANSM_STATE_SLEEP == CanSM_CurrentState)) {
+                    CanIf_SetControllerMode(0, CANIF_CS_STARTED);
+                    CanSM_CurrentState = CANSM_STATE_ONLINE;
                 }
                 break;
             case CANSM_STATE_OFFLINE:
-                // TODO: Call CanIf to disable TX/RX
-                currentState = CANSM_STATE_OFFLINE;
+                CanIf_SetControllerMode(0, CANIF_CS_STOPPED);
+                CanSM_CurrentState = CANSM_STATE_OFFLINE;
                 break;
             case CANSM_STATE_SLEEP:
-                if (currentState == CANSM_STATE_OFFLINE || currentState == CANSM_STATE_ONLINE) {
-                    // TODO: Call CanTrcv to go to standby/sleep mode
-                    currentState = CANSM_STATE_SLEEP;
+                if ((CANSM_STATE_OFFLINE == CanSM_CurrentState) || (CANSM_STATE_ONLINE == CanSM_CurrentState)) {
+                    CanIf_SetControllerMode(0, CANIF_CS_SLEEP);
+                    CanSM_CurrentState = CANSM_STATE_SLEEP;
                 }
                 break;
             default: break;

@@ -6,7 +6,7 @@
 
 // Initialization and State Management (Handled via CanSM underneath)
 void Can_Init(void);
-bool Can_RequestState(Can_State_t targetState);
+Std_ReturnType_t Can_RequestState(Can_State_t targetState);
 Can_State_t Can_GetCurrentState(void);
 
 // Unified Transmission (Routes to CanIf or CanTp internally)

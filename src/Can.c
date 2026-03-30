@@ -11,7 +11,7 @@ void Can_Init(void) {
     CanTp_Init();
 }
 
-bool Can_RequestState(Can_State_t targetState) {
+Std_ReturnType_t Can_RequestState(Can_State_t targetState) {
     CanSM_NetworkState_t smState;
     switch(targetState) {
         case CAN_STATE_ONLINE:  smState = CANSM_STATE_ONLINE; break;

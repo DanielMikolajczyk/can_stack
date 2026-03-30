@@ -1,4 +1,4 @@
-#include "Std_Types.h"
+#include "CanTypes.h"
 #include "CanDrv.h"
 #include "CanIf.h"
 
@@ -6,7 +6,6 @@
 #define REG_CAN_MB0_RX_ID (0)
 #define REG_CAN_MB0_RX_DLC (0)
 #define REG_CAN_MB0_RX_DATA_START (0)
-
 
 void CAN_Mailbox0_Interrupt_Handler(void) {
     uint32_t can_id;
@@ -16,14 +15,14 @@ void CAN_Mailbox0_Interrupt_Handler(void) {
     CanPdu_t canPdu;
 
     // 1. Read Metadata from Registers
-    CanDriver_ReadReg(REG_CAN_MB0_RX_ID, &can_id);
-    CanDriver_ReadReg(REG_CAN_MB0_RX_DLC, &can_dlc);
+    // CanDriver_ReadReg(REG_CAN_MB0_RX_ID, &can_id);
+    // CanDriver_ReadReg(REG_CAN_MB0_RX_DLC, &can_dlc);
 
     //TODO: DMA
     // 2. Read Data from Registers safely into our memory buffer
     // (Note: Hardware usually has multiple 32-bit data registers,
     // so this function must copy the bytes into your payload_buffer array)
-    CanDriver_ReadPayloadRegs(REG_CAN_MB0_RX_DATA_START, payload_buffer, can_dlc);
+    // CanDriver_ReadPayloadRegs(REG_CAN_MB0_RX_DATA_START, payload_buffer, can_dlc);
 
     // 3. Pack into the Abstract Architectural Structures
     mailboxInfo.canId = can_id;
