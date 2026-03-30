@@ -3,7 +3,7 @@
 
 #include "Std_Types.h"
 #include "CanIf.h"
-#include "Can_cfg.h"
+#include "CanCfg.h"
 
 void CanTp_Init(void);
 void CanTp_MainFunction(void);

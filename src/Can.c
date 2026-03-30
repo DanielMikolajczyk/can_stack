@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #include "CanSM.h"
-#include "Can_cfg.h"
+#include "CanCfg.h"
 
 void Can_Init(void) {
     CanSM_Init();

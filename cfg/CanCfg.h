@@ -1,5 +1,5 @@
 /**
- * @file    can_cfg.h
+ * @file    CanCfg.h
  * @brief   CAN Driver Configuration – Type definitions, constants, and
  *          callback prototypes for the custom AUTOSAR-like CAN stack.
  */

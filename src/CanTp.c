@@ -4,7 +4,7 @@
 #include <string.h>
 #include "Can.h" // For routing reassembled messages up to the Facade
 #include "CanIf.h"
-#include "Can_cfg.h"
+#include "CanCfg.h"
 
 // ISO 15765-2 Protocol Control Information (PCI) types
 #define PCI_TYPE_SINGLE_FRAME       0x00
@@ -26,6 +26,8 @@
 
 // Max payload for a Consecutive Frame (8-byte CAN frame: 1 for PCI, 7 for data)
 #define CANTP_CF_MAX_PAYLOAD 7
+
+
 
 typedef enum {
     CANTP_TX_STATE_IDLE,
@@ -133,24 +135,84 @@ void CanTp_MainFunction(void) {
 }
 
 static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
-    uint8_t frame_payload[8];
+    uint8_t framePayload[64u];
+    uint16_t dataOffset = 0u;
     CanPdu_t canPdu;
+    uint16_t bytesToSend = 0u;
+    uint16_t dataLength = 0u;
 
-    // PCI: 0x1 (FF) and 12-bit length
-    frame_payload[0] = PCI_TYPE_FIRST_FRAME | ((channel->totalSize >> 8) & 0x0F);
-    frame_payload[1] = channel->totalSize & 0xFF;
-    //TODO: Can-FD specific shouldn't have 0x00 0x00 4bytes of size?
+    if (CAN_FRAME_CLASSIC == channel->txConfig->frameType) {
+        // TODO: MACRO CAN SIZE
+        bytesToSend = 8u;
+        framePayload[0u] = PCI_TYPE_FIRST_FRAME | ((channel->totalSize >> 8u) & 0x0Fu);
+        dataOffset = 1u;
+    } else {
+        //CAN FD
+        // TODO: MACRO CAN FD SIZE
+        bytesToSend = 64u;
+        /* According to ISO-15765-2 */
+        framePayload[0u] = PCI_TYPE_FIRST_FRAME;
+        framePayload[1u] = 62u;
+        dataOffset = 2u;
+    }
 
-    // Copy first part of the data
-    memcpy(&frame_payload[2], channel->data, CANTP_FF_MAX_PAYLOAD);
+    dataLength = bytesToSend - dataOffset;
+    memcpy(&framePayload[dataOffset], channel->data, dataLength);
 
-    canPdu.sduDataPtr = frame_payload;
-    canPdu.sduLength = 3u;
+    canPdu.sduDataPtr = framePayload;
+    canPdu.sduLength = bytesToSend;
     if (CanIf_Transmit(channel->txConfig, &canPdu)) {
         // Update channel state on successful transmission
-        channel->data += CANTP_FF_MAX_PAYLOAD;
-        channel->remainingSize -= CANTP_FF_MAX_PAYLOAD;
+        channel->data += dataLength;
+        channel->remainingSize -= dataLength;
         channel->state = CANTP_TX_STATE_WAIT_FC;
+    }
+    // If transmit fails, we will retry on the next CanTp_MainFunction call.
+}
+
+static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
+    CanPdu_t canPdu;
+    uint8_t framePayload[64u];
+    uint8_t bytesToSend = 0u;
+    uint8_t frameLength = 0u;
+
+    if (0u == channel->remainingSize) {
+        channel->state = CANTP_TX_STATE_IDLE;
+        return;
+    }
+
+    // If blockSize is > 0, check if we've sent the whole block
+    if ((channel->blockSize > 0) && (channel->cfSentInBlock >= channel->blockSize)) {
+        channel->state = CANTP_TX_STATE_WAIT_FC; // Wait for the next FC
+        return;
+    }
+
+    if (CAN_FRAME_CLASSIC == channel->txConfig->frameType) {
+        bytesToSend = (channel->remainingSize > CANTP_CF_MAX_PAYLOAD) ? CANTP_CF_MAX_PAYLOAD : channel->remainingSize;
+    } else {
+        //CAN FD
+        bytesToSend = (channel->remainingSize > 64-1) ? 64-1 : channel->remainingSize;
+    }
+    // PCI: 0x2 (CF) and 4-bit sequence number
+    framePayload[0u] = PCI_TYPE_CONSECUTIVE_FRAME | (channel->sequenceNumber & 0x0F);
+    // Copy the next chunk of data
+    memcpy(&framePayload[1u], channel->data, bytesToSend);
+
+    // The total length of the CAN frame is 1 (PCI) + data bytes
+    frameLength = 1u + bytesToSend;
+    canPdu.sduDataPtr = framePayload;
+    canPdu.sduLength = frameLength;
+
+    if (CanIf_Transmit(channel->txConfig, &canPdu)) {
+        // Update channel state on successful transmission
+        channel->data += bytesToSend;
+        channel->remainingSize -= bytesToSend;
+        channel->sequenceNumber = (channel->sequenceNumber + 1) & 0x0F;
+        channel->cfSentInBlock++;
+
+        if (channel->remainingSize == 0) {
+            channel->state = CANTP_TX_STATE_IDLE; // Transmission finished
+        }
     }
     // If transmit fails, we will retry on the next CanTp_MainFunction call.
 }
@@ -159,7 +221,7 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const can
     uint32_t canId = rxConfig->canId;
     uint8_t pciType;
 
-    if ((NULL_PTR == canPdu->sduDataPtr) || (8u >= canPdu->sduLength)) {
+    if ((NULL_PTR == canPdu->sduDataPtr)) {
         //TODO det
         // TODO ret_val
         return;
@@ -273,46 +335,4 @@ void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const can
             break;
         }
     }
-}
-
-static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
-    CanPdu_t canPdu;
-    uint8_t framePayload[8];
-    uint8_t bytesToSend = 0u;
-    uint8_t frameLength = 0u;
-
-    if (0u == channel->remainingSize) {
-        channel->state = CANTP_TX_STATE_IDLE; // Transmission complete
-        return;
-    }
-
-    // If blockSize is > 0, check if we've sent the whole block
-    if ((channel->blockSize > 0) && (channel->cfSentInBlock >= channel->blockSize)) {
-        channel->state = CANTP_TX_STATE_WAIT_FC; // Wait for the next FC
-        return;
-    }
-
-    bytesToSend = (channel->remainingSize > CANTP_CF_MAX_PAYLOAD) ? CANTP_CF_MAX_PAYLOAD : channel->remainingSize;
-    // PCI: 0x2 (CF) and 4-bit sequence number
-    framePayload[0u] = PCI_TYPE_CONSECUTIVE_FRAME | (channel->sequenceNumber & 0x0F);
-    // Copy the next chunk of data
-    memcpy(&framePayload[1u], channel->data, bytesToSend);
-
-    // The total length of the CAN frame is 1 (PCI) + data bytes
-    frameLength = 1u + bytesToSend;
-    canPdu.sduDataPtr = framePayload;
-    canPdu.sduLength = frameLength;
-
-    if (CanIf_Transmit(channel->txConfig, &canPdu)) {
-        // Update channel state on successful transmission
-        channel->data += bytesToSend;
-        channel->remainingSize -= bytesToSend;
-        channel->sequenceNumber = (channel->sequenceNumber + 1) & 0x0F;
-        channel->cfSentInBlock++;
-
-        if (channel->remainingSize == 0) {
-            channel->state = CANTP_TX_STATE_IDLE; // Transmission finished
-        }
-    }
-    // If transmit fails, we will retry on the next CanTp_MainFunction call.
 }

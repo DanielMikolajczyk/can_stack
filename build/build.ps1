@@ -6,12 +6,13 @@ $Output  = "build/output/cantp_node.exe"
 
 $IncludeDirs = @(
     "inc",
-    "external/inc"
+    "external/inc",
+    "cfg"
 )
 
 # Explicitly list your source files here
 $Sources = @(
-    "src/Can_cfg.c",
+    "cfg/CanCfg.c",
     "src/Can.c",
     "src/CanIf.c",
     "src/CanSM.c",

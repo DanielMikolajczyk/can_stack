@@ -12,7 +12,7 @@
  *            - CanMessageObjects : Hardware message-object table
  */
 
-#include "Can_cfg.h"
+#include "CanCfg.h"
 
 /* =========================================================================
  * 1.  SYMBOLIC IDENTIFIERS
@@ -79,10 +79,10 @@ const Can_TxPduConfigType CanCfg_TxPdu[CAN_NUM_TX_PDUS] =
     /* ------------------------------------------------------------------ */
     {
         .canId        = 0x18FF0002UL,
-        .canIdType    = CAN_ID_TYPE_EXTENDED,
-        .frameType    = CAN_FRAME_CLASSIC,
-        .protocol     = CAN_IF,
-        .length       = 8u,
+        .canIdType    = CAN_ID_TYPE_FD,
+        .frameType    = CAN_FRAME_FD,
+        .protocol     = CAN_TP,
+        .length       = 128u,
         .CyclicPeriodMs = 20U,
         .globalTxId      = 1u,
         .HwObjectRef    = CAN_HW_OBJ_TX_0,

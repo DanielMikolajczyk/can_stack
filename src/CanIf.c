@@ -1,5 +1,5 @@
 #include "Std_Types.h"
-#include "Can_cfg.h"
+#include "CanCfg.h"
 #include "CanTypes.h"
 #include "CanIf.h"
 #include "CanTp.h"
