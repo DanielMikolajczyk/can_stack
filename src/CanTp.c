@@ -64,13 +64,18 @@ typedef struct {
     uint8_t expectedSequenceNumber;
 } CanTp_RxChannel_t;
 
-static CanTp_TxChannel_t txChannels[CANTP_MAX_TX_CHANNELS];
-static CanTp_RxChannel_t rxChannels[CANTP_MAX_RX_CHANNELS];
+STATIC CanTp_TxChannel_t txChannels[CANTP_MAX_TX_CHANNELS];
+STATIC CanTp_RxChannel_t rxChannels[CANTP_MAX_RX_CHANNELS];
 
 // Forward declarations for internal state processing functions
-static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel);
-static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel);
+STATIC void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel);
+STATIC void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel);
 
+/**
+ * @brief Initializes the CAN Transport Protocol module.
+ * @details Resets all transmission and reception channels to their idle state.
+ *          This function must be called before any other CanTp function is used.
+ */
 void CanTp_Init(void) {
     for (int i = 0; i < CANTP_MAX_TX_CHANNELS; ++i) {
         txChannels[i].state = CANTP_TX_STATE_IDLE;
@@ -80,6 +85,15 @@ void CanTp_Init(void) {
     }
 }
 
+/**
+ * @brief Requests the transmission of a multi-frame PDU.
+ * @details Finds an available transmission channel and initializes it with the
+ *          PDU data. The actual transmission of frames is handled by the
+ *          CanTp_MainFunction.
+ * @param[in] txConfig Pointer to the configuration of the PDU to be transmitted.
+ * @param[in] canPdu Pointer to the PDU data (payload and length).
+ * @return Std_ReturnType E_OK if a channel was available and the request was accepted, E_NOT_OK otherwise.
+ */
 Std_ReturnType_t CanTp_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* canPdu) {
     Std_ReturnType_t ret_val = E_NOT_OK;
 
@@ -107,6 +121,12 @@ Std_ReturnType_t CanTp_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* c
     return ret_val;
 }
 
+/**
+ * @brief Main processing function for the CAN Transport Protocol module.
+ * @details This function must be called periodically. It drives the state machines
+ *          for all active transmission channels, processing the sending of First
+ *          Frames and Consecutive Frames.
+ */
 void CanTp_MainFunction(void) {
     for (int i = 0; i < CANTP_MAX_TX_CHANNELS; ++i) {
         CanTp_TxChannel_t* channel = &txChannels[i];
@@ -134,7 +154,14 @@ void CanTp_MainFunction(void) {
     }
 }
 
-static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
+/**
+ * @brief Processes the sending of a First Frame (FF).
+ * @details Constructs and transmits the First Frame of a segmented message.
+ *          On successful transmission, it transitions the channel state to
+ *          wait for a Flow Control (FC) frame.
+ * @param[in,out] channel Pointer to the active transmission channel.
+ */
+STATIC void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
     uint8_t framePayload[64u];
     uint16_t dataOffset = 0u;
     CanPdu_t canPdu;
@@ -170,7 +197,14 @@ static void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
     // If transmit fails, we will retry on the next CanTp_MainFunction call.
 }
 
-static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
+/**
+ * @brief Processes the sending of a Consecutive Frame (CF).
+ * @details Constructs and transmits a Consecutive Frame. It handles sequence
+ *          numbering and block size checking. If the transmission is complete,
+ *          it sets the channel back to idle.
+ * @param[in,out] channel Pointer to the active transmission channel.
+ */
+STATIC void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
     CanPdu_t canPdu;
     uint8_t framePayload[64u];
     uint8_t bytesToSend = 0u;
@@ -217,6 +251,15 @@ static void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
     // If transmit fails, we will retry on the next CanTp_MainFunction call.
 }
 
+/**
+ * @brief Callback for received ISO-TP frames.
+ * @details This function is called by CanIf when a frame configured for the TP layer
+ *          is received. It parses the Protocol Control Information (PCI) and handles
+ *          Flow Control (FC), Single Frame (SF), First Frame (FF), and
+ *          Consecutive Frame (CF) types accordingly.
+ * @param[in] rxConfig Pointer to the configuration of the received PDU.
+ * @param[in] canPdu Pointer to the PDU containing the received data.
+ */
 void CanTp_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu) {
     uint32_t canId = rxConfig->canId;
     uint8_t pciType;

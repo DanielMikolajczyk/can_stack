@@ -17,6 +17,12 @@ STATIC bool CanSM_TimerActive[CAN_NETWORKS_NO][CANSM_MAX_TIMERS];
 
 STATIC void CanSM_BusOffRecovery(void);
 
+/**
+ * @brief Handles the Bus-Off recovery sequence.
+ * @details This static function is called periodically by CanSM_MainFunction.
+ *          It manages the Bus-Off recovery timer and attempts to bring the CAN controller
+ *          back to the STARTED state after the timer expires. It also handles retries if the initial attempt fails.
+ */
 STATIC void CanSM_BusOffRecovery(void) {
     /* Decrement active timers on every periodic cycle */
     for (uint8_t net = 0; net < CAN_NETWORKS_NO; net++) {
@@ -34,6 +40,13 @@ STATIC void CanSM_BusOffRecovery(void) {
     }
 }
 
+/**
+ * @brief Starts a software timer within the CanSM module.
+ * @details Initializes a specified timer with a given value and activates it.
+ * @param[in] network The ID of the CAN network for which the timer is started.
+ * @param[in] timerId The identifier of the timer to start (e.g., CANSM_TIMER_BUS_OFF).
+ * @param[in] value The initial value (duration) for the timer.
+ */
 void CanSM_StartTimer(uint8_t network, CanSM_TimerId_t timerId, uint32_t value) {
     if ((network < CAN_NETWORKS_NO) && (timerId < CANSM_MAX_TIMERS)) {
         CanSM_Timer[network][timerId] = value;
@@ -42,6 +55,14 @@ void CanSM_StartTimer(uint8_t network, CanSM_TimerId_t timerId, uint32_t value) 
 }
 
 bool CanSM_GetTimer(uint8_t network, CanSM_TimerId_t timerId) {
+/**
+ * @brief Checks if a specified software timer has expired.
+ * @details Returns true if the timer has reached zero and was active. If expired,
+ *          the timer is automatically deactivated.
+ * @param[in] network The ID of the CAN network.
+ * @param[in] timerId The identifier of the timer to check.
+ * @return bool True if the timer has expired, false otherwise.
+ */
     bool expired = false;
     if ((network < CAN_NETWORKS_NO) && (timerId < CANSM_MAX_TIMERS)) {
         if (CanSM_TimerActive[network][timerId] && (0u == CanSM_Timer[network][timerId])) {
@@ -52,6 +73,11 @@ bool CanSM_GetTimer(uint8_t network, CanSM_TimerId_t timerId) {
     return expired;
 }
 
+/**
+ * @brief Initializes the CAN State Manager module.
+ * @details Sets the initial state of the CAN network to OFFLINE and clears
+ *          all pending events and timers.
+ */
 void CanSM_Init(void) {
     CanSM_CurrentState = CANSM_STATE_OFFLINE;
     CanSM_RequestedState = CANSM_STATE_OFFLINE;
@@ -66,6 +92,13 @@ void CanSM_Init(void) {
     }
 }
 
+/**
+ * @brief Requests a state change for the CAN network.
+ * @details Allows an upper layer (e.g., Can module) to request a new state
+ *          for the CAN network. The actual state transition is handled by CanSM_MainFunction.
+ * @param[in] targetState The desired network state.
+ * @return Std_ReturnType E_OK if the request was accepted, E_NOT_OK if the module is uninitialized.
+ */
 Std_ReturnType_t CanSM_RequestState(CanSM_NetworkState_t targetState) {
     Std_ReturnType_t ret_val = E_NOT_OK;
     if (CANSM_STATE_UNINIT != CanSM_CurrentState) {
@@ -76,18 +109,39 @@ Std_ReturnType_t CanSM_RequestState(CanSM_NetworkState_t targetState) {
     return ret_val;
 }
 
+/**
+ * @brief Gets the current state of the CAN network.
+ * @details Returns the current operational state of the CAN network.
+ * @return CanSM_NetworkState_t The current network state.
+ */
 CanSM_NetworkState_t CanSM_GetCurrentState(void) {
     return CanSM_CurrentState;
 }
 
+/**
+ * @brief Reports a bus wakeup event.
+ * @details This function is called by lower layers (e.g., CanTrcv) to indicate
+ *          that a wakeup event has occurred on the CAN bus.
+ */
 void CanSM_ReportBusWakeup(void) {
     CanSM_BusWakeupPending = true;
 }
 
+/**
+ * @brief Reports a Bus-Off event.
+ * @details This function is called by lower layers (e.g., CanIf, CanDrv) to indicate
+ *          that the CAN controller has entered a Bus-Off state.
+ */
 void CanSM_ReportBusOff(void) {
     CanSM_BusOffPending = true;
 }
 
+/**
+ * @brief Main processing function for the CAN State Manager module.
+ * @details This function must be called periodically. It handles Bus-Off recovery,
+ *          processes pending wakeup events, and manages state transitions based
+ *          on requested states.
+ */
 void CanSM_MainFunction(void) {
     if (CanSM_CurrentState == CANSM_STATE_UNINIT) {
         /* TODO det */
