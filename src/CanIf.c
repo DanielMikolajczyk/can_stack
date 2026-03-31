@@ -103,13 +103,20 @@ static Std_ReturnType_t CanIf_FindRxCanFrameConfig(const Can_RxPduConfigType** r
 }
 
 Std_ReturnType_t CanIf_Transmit(const Can_TxPduConfigType* txConfig, CanPdu_t* canPdu){
-    Std_ReturnType_t ret_val = E_NOT_OK;
+    Std_ReturnType_t ret_val = E_OK;
     uint32_t dlc;
 
     if ((NULL_PTR == canPdu->sduDataPtr) || (0u == canPdu->sduLength) || (canPdu->sduLength > 64u)) {
         // TODO:Det
-        ;
-    } else {
+        ret_val = E_NOT_OK;
+    }
+
+    /* Do not transmit if bus off occured (TODO: verify correctness of the solution) */
+    if ((E_NOT_OK == ret_val) || (CAN_STATE_ONLINE != Can_GetCurrentState())) {
+        ret_val = E_NOT_OK;
+    }
+
+    if (E_OK == ret_val) {
         dlc = CanIf_LengthToDLC(canPdu->sduLength);
         CanDriver_Transmit(txConfig, canPdu, dlc);
     }

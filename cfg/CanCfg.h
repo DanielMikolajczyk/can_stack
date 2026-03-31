@@ -13,9 +13,9 @@
 /* =========================================================================
  * 1.  CONFIGURATION SIZES
  * ========================================================================= */
-#define CAN_NUM_TX_PDUS     5U
-#define CAN_NUM_RX_PDUS     4U
-#define CAN_NUM_HW_OBJECTS  6U   /* 4 Tx buffers + 2 Rx FIFOs */
+#define CAN_NUM_TX_PDUS     (5U)
+#define CAN_NUM_RX_PDUS     (4U)
+#define CAN_NUM_HW_OBJECTS  (6U)   /* 4 Tx buffers + 2 Rx FIFOs */
 
 /* =========================================================================
  * 2.  ENUM TYPES
@@ -27,13 +27,23 @@
 /* =========================================================================
  * 3.  HARDWARE OBJECT SYMBOLIC NAMES
  * ========================================================================= */
-#define CAN_HW_OBJ_TX_0    0U
-#define CAN_HW_OBJ_TX_1    1U
-#define CAN_HW_OBJ_TX_2    2U
-#define CAN_HW_OBJ_TX_3    3U
-#define CAN_HW_OBJ_RX_FIFO0 4U
-#define CAN_HW_OBJ_RX_FIFO1 5U
+#define CAN_HW_OBJ_TX_0    (0U)
+#define CAN_HW_OBJ_TX_1    (1U)
+#define CAN_HW_OBJ_TX_2    (2U)
+#define CAN_HW_OBJ_TX_3    (3U)
+#define CAN_HW_OBJ_RX_FIFO0 (4U)
+#define CAN_HW_OBJ_RX_FIFO1 (5U)
 
+/* Main function period */
+#define CAN_MAIN_FUNCTION_PERIOD        (5u)
+
+/* Bus off timers for recovery */
+#define CAN_TIMER_BUS_OFF_FAST_RECOVERY (50u)
+#define CAN_TIMER_BUS_OFF_SLOW_RECOVERY (1000u)
+
+#define CAN_NETWORKS_NO              (1u)
+
+#define CAN_BUS_OFF_EVENT()
 /* =========================================================================
  * 4.  CALLBACK TYPEDEFS
  * ========================================================================= */

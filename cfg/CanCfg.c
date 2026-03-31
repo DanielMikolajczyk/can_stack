@@ -267,8 +267,8 @@ const Can_HwObjectConfigType CanMessageObjects[CAN_NUM_HW_OBJECTS] =
     { .HwObjId = 3U,  .Direction = CAN_DIRECTION_TX, .FrameType = CAN_FRAME_FD,      .FifoDepth = 1U },
 
     /* Rx FIFOs */
-    { .HwObjId = 16U, .Direction = CAN_DIRECTION_RX, .FrameType = CAN_FRAME_CLASSIC, .FifoDepth = 8U },  /* FIFO 0 */
-    { .HwObjId = 17U, .Direction = CAN_DIRECTION_RX, .FrameType = CAN_FRAME_FD,      .FifoDepth = 8U }   /* FIFO 1 */
+    { .HwObjId = 16U, .Direction = CAN_DIRECTION_RX, .FrameType = CAN_FRAME_CLASSIC, .FifoDepth = 8U },
+    { .HwObjId = 17U, .Direction = CAN_DIRECTION_RX, .FrameType = CAN_FRAME_FD,      .FifoDepth = 8U }
 };
 
 /* =========================================================================

@@ -46,6 +46,10 @@ Std_ReturnType_t Can_Write(uint32_t canId, const uint8_t* payload, uint16_t leng
         ret_val = E_NOT_OK;
     }
 
+    if ((E_NOT_OK == ret_val) || (CAN_STATE_ONLINE != Can_GetCurrentState())) {
+        ret_val = E_NOT_OK;
+    }
+
     if ((E_NOT_OK == ret_val) || (E_NOT_OK == CanIf_FindTxCanFrameConfig(&txConfig, canId))) {
         ;//TODO: det ID Not found
         ret_val = E_NOT_OK;
