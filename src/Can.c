@@ -124,7 +124,6 @@ void Can_MainFunction(void) {
     CanTp_MainFunction();
 }
 
-#include <stdio.h>
 /**
  * @brief Internal callback for standard message reception.
  * @details This function is called by the CanIf module when a complete, standard
@@ -136,6 +135,5 @@ void Can_MainFunction(void) {
 void Can_RxIndication(const Can_RxPduConfigType *rxConfig, CanPdu_t* const canPdu){
     // Provide the clean facade API to pass standard CAN messages
     // up to the external application layer.
-    // App_OnCanMessageReceived(rxConfig, payload, length);
-    printf("frame received\n");
+    App_OnCanMessageReceived(rxConfig->canId, canPdu->sduDataPtr, canPdu->sduLength);
 }

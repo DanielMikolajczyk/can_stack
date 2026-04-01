@@ -172,15 +172,20 @@ STATIC void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
         // TODO: MACRO CAN SIZE
         bytesToSend = 8u;
         framePayload[0u] = PCI_TYPE_FIRST_FRAME | ((channel->totalSize >> 8u) & 0x0Fu);
-        dataOffset = 1u;
+        framePayload[1u] = (channel->totalSize & 0xFFu);
+        dataOffset = 2u;
     } else {
         //CAN FD
         // TODO: MACRO CAN FD SIZE
         bytesToSend = 64u;
         /* According to ISO-15765-2 */
         framePayload[0u] = PCI_TYPE_FIRST_FRAME;
-        framePayload[1u] = 62u;
-        dataOffset = 2u;
+        framePayload[1u] = 0u;
+        framePayload[2u] = (channel->totalSize & 0xFF000000u);
+        framePayload[3u] = (channel->totalSize & 0x00FF0000u);
+        framePayload[4u] = (channel->totalSize & 0x0000FF00u);
+        framePayload[5u] = (channel->totalSize & 0x000000FFu);
+        dataOffset = 6u;
     }
 
     dataLength = bytesToSend - dataOffset;
@@ -188,7 +193,7 @@ STATIC void CanTp_ProcessSendFF(CanTp_TxChannel_t* channel) {
 
     canPdu.sduDataPtr = framePayload;
     canPdu.sduLength = bytesToSend;
-    if (CanIf_Transmit(channel->txConfig, &canPdu)) {
+    if (E_OK == CanIf_Transmit(channel->txConfig, &canPdu)) {
         // Update channel state on successful transmission
         channel->data += dataLength;
         channel->remainingSize -= dataLength;
@@ -237,7 +242,7 @@ STATIC void CanTp_ProcessSendCF(CanTp_TxChannel_t* channel) {
     canPdu.sduDataPtr = framePayload;
     canPdu.sduLength = frameLength;
 
-    if (CanIf_Transmit(channel->txConfig, &canPdu)) {
+    if (E_OK == CanIf_Transmit(channel->txConfig, &canPdu)) {
         // Update channel state on successful transmission
         channel->data += bytesToSend;
         channel->remainingSize -= bytesToSend;
